@@ -1,0 +1,33 @@
+# ---- secrets / credentials ----
+.env
+data/.auth_secret
+data/users.json
+
+# ---- runtime / generated data ----
+data/
+*.log
+_run.log
+
+# ---- python ----
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# ---- node / frontend deps ----
+node_modules/
+
+# ---- local tooling ----
+.claude/
+.vscode/
+.idea/
+.DS_Store
+
+# ---- sensitive customer / sample documents (do NOT publish) ----
+*.pdf
+*.xlsx
+*.xls
+*.docx
+*.doc
