@@ -190,7 +190,7 @@ def _hstack(y0, y1, xLeft, tp, layers):
 def _views(g: HousingAGeom, p: HousingAParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    cx = ax0 + (ax1 - ax0) * 0.34
+    cx = ax0 + (ax1 - ax0) * 0.35        # top view sits left so the full view (with B-B) centers
     sv = min((ax1 - ax0 - 96) / g.outer_dia, (ay1 - ay0 - 150) / g.outer_dia)
     r = g.outer_dia * sv / 2
     r = max(20.0, min(r, 40.0))
@@ -279,7 +279,7 @@ def _views(g: HousingAGeom, p: HousingAParams) -> list[str]:
     s.append(text(cx, yTop + tp + 8, "SECTION  A-A", 2.6, weight="bold"))
 
     # ---------------- SECTION B-B (A-A rotated 90° to the left) ----------------
-    bx = ax1 - 20
+    bx = ax1 - 26                                 # pulled in so its label clears the border
     by_c = cy1
     bw = tp                                       # width (x) = thickness
     x0 = bx - bw / 2
@@ -292,7 +292,7 @@ def _views(g: HousingAGeom, p: HousingAParams) -> list[str]:
     # balloon ① at the bottom (as in the reference)
     s.append(line(x0, by_c + r - 3, x0 - 5.6, by_c + r - 3, THIN))
     s.append(_balloon(x0 - 8, by_c + r - 3, 1))
-    s.append(text(bx + bw / 2 + 10, by_c, "SECTION B-B", 2.6, weight="bold", rot=90))
+    s.append(text(bx + bw / 2 + 7, by_c, "SECTION B-B", 2.6, weight="bold", rot=90))
 
     # ---------------- assembly BOM table (above footer) ----------------
     s += _bom_table(g, p)
@@ -317,7 +317,7 @@ def _bom_table(g: HousingAGeom, p: HousingAParams) -> list[str]:
     cols = [("S.No", 12), ("COMPONENT NAME", 96), ("QTY/NoS", 24), ("REF. DRG. NO", 40)]
     tw = sum(w for _, w in cols)
     x0 = BORDER_R - tw
-    rh = 5.0
+    rh = 5.6
     y0 = FOOT_TOP - (len(rows) + 1) * rh - 1.5
     # outer + header
     s.append(rect(x0, y0, tw, (len(rows) + 1) * rh, MED))
@@ -326,7 +326,7 @@ def _bom_table(g: HousingAGeom, p: HousingAParams) -> list[str]:
         cxs.append(cxs[-1] + w)
     for i, (name, w) in enumerate(cols):
         s.append(line(cxs[i], y0, cxs[i], y0 + (len(rows) + 1) * rh, THIN))
-        s.append(text((cxs[i] + cxs[i + 1]) / 2, y0 + rh - 1.6, name, 1.7, weight="bold"))
+        s.append(text((cxs[i] + cxs[i + 1]) / 2, y0 + rh - 2.0, name, 2.1, weight="bold"))
     for r_i, row in enumerate(rows):
         ry = y0 + (r_i + 1) * rh
         s.append(line(x0, ry, x0 + tw, ry, THIN))
@@ -334,7 +334,7 @@ def _bom_table(g: HousingAGeom, p: HousingAParams) -> list[str]:
         for c_i, v in enumerate(vals):
             anc = "middle" if c_i != 1 else "start"
             xx = (cxs[c_i] + cxs[c_i + 1]) / 2 if c_i != 1 else cxs[c_i] + 1.5
-            s.append(text(xx, ry + rh - 1.7, v, 1.6, anchor=anc))
+            s.append(text(xx, ry + rh - 2.0, v, 2.0, anchor=anc))
     return s
 
 

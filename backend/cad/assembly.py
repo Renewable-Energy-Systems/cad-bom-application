@@ -71,10 +71,10 @@ def _pellet(cx, y, rx, ry, fill):
 
 def _bom_table(g: AssemblyGeom) -> list[str]:
     s: list[str] = []
-    cols = [("S.No", 11), ("COMPONENT", 52), ("QTY", 15), ("REF. DRG. NO", 38)]
+    cols = [("S.No", 12), ("COMPONENT", 56), ("QTY", 16), ("REF. DRG. NO", 40)]
     tw = sum(w for _, w in cols)
     x0 = BORDER_R - tw
-    rh = 5.0
+    rh = 5.6
     nrows = len(g.bom)
     y0 = FOOT_TOP - (nrows + 1) * rh - 2
     s.append(rect(x0, y0, tw, (nrows + 1) * rh, MED))
@@ -83,16 +83,16 @@ def _bom_table(g: AssemblyGeom) -> list[str]:
         cxs.append(cxs[-1] + w)
     for i, (name, w) in enumerate(cols):
         s.append(line(cxs[i], y0, cxs[i], y0 + (nrows + 1) * rh, THIN))
-        s.append(text((cxs[i] + cxs[i + 1]) / 2, y0 + rh - 1.6, name, 1.8, weight="bold"))
+        s.append(text((cxs[i] + cxs[i + 1]) / 2, y0 + rh - 2.0, name, 2.2, weight="bold"))
     s.append(line(x0, y0 + rh, x0 + tw, y0 + rh, THIN))
     for ri, (sno, nm, qty, ref) in enumerate(g.bom):
         ry = y0 + (ri + 1) * rh
         if ri:
             s.append(line(x0, ry, x0 + tw, ry, THIN))
-        s.append(text((cxs[0] + cxs[1]) / 2, ry + rh - 1.7, f"{int(sno):02d}", 1.7))
-        s.append(text(cxs[1] + 1.5, ry + rh - 1.7, str(nm), 1.6, anchor="start"))
-        s.append(text((cxs[2] + cxs[3]) / 2, ry + rh - 1.7, str(qty), 1.7))
-        s.append(text((cxs[3] + cxs[4]) / 2, ry + rh - 1.7, ref or "—", 1.6))
+        s.append(text((cxs[0] + cxs[1]) / 2, ry + rh - 2.0, f"{int(sno):02d}", 2.1))
+        s.append(text(cxs[1] + 1.5, ry + rh - 2.0, str(nm), 2.0, anchor="start"))
+        s.append(text((cxs[2] + cxs[3]) / 2, ry + rh - 2.0, str(qty), 2.1))
+        s.append(text((cxs[3] + cxs[4]) / 2, ry + rh - 2.0, ref or "—", 2.0))
     return s, y0
 
 

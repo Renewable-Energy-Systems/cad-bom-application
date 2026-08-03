@@ -61,14 +61,14 @@ def _table(g: FiberfraxSheetGeom) -> list[str]:
     nrows = len(g.rows)
     y0 = FOOT_TOP - (nrows + 2) * rh - 2
     s.append(rect(x0, y0, tw, (nrows + 2) * rh, MED))
-    s.append(text(x0 + tw / 2, y0 + rh - 1.6, "FIBERFRAX SHEET SIZES", 1.9, weight="bold"))
+    s.append(text(x0 + tw / 2, y0 + rh - 1.6, "FIBERFRAX SHEET SIZES", 2.3, weight="bold"))
     s.append(line(x0, y0 + rh, x0 + tw, y0 + rh, THIN))
     cxs = [x0]
     for _, w in cols:
         cxs.append(cxs[-1] + w)
     for i, (name, w) in enumerate(cols):
         s.append(line(cxs[i], y0 + rh, cxs[i], y0 + (nrows + 2) * rh, THIN))
-        s.append(text((cxs[i] + cxs[i + 1]) / 2, y0 + 2 * rh - 1.6, name, 1.8, weight="bold"))
+        s.append(text((cxs[i] + cxs[i + 1]) / 2, y0 + 2 * rh - 1.6, name, 2.2, weight="bold"))
     s.append(line(x0, y0 + 2 * rh, x0 + tw, y0 + 2 * rh, THIN))
     for ri, row in enumerate(g.rows):
         ry = y0 + (ri + 2) * rh
@@ -76,7 +76,7 @@ def _table(g: FiberfraxSheetGeom) -> list[str]:
             s.append(line(x0, ry, x0 + tw, ry, THIN))
         vals = [str(row[0]), _n(row[1]), _n(row[2]), _n(row[3])]
         for ci, v in enumerate(vals):
-            s.append(text((cxs[ci] + cxs[ci + 1]) / 2, ry + rh - 1.7, v, 1.7))
+            s.append(text((cxs[ci] + cxs[ci + 1]) / 2, ry + rh - 1.7, v, 2.1))
     return s
 
 

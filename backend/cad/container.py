@@ -163,7 +163,7 @@ def _header(g: ContainerGeom, p: ContainerParams) -> list[str]:
     s.append(line(BORDER_L, y0, xsplit, y0, MED))
     s.append(line(BORDER_L, y0 + 5, xsplit, y0 + 5, THIN))
     for name, w in rev_cols:
-        s.append(text(x + w / 2, y0 + 3.4, name, 1.6, weight="bold"))
+        s.append(text(x + w / 2, y0 + 3.4, name, 2.0, weight="bold"))
         s.append(line(x, y0, x, y1, THIN))
         colx[name] = (x, w)
         x += w
@@ -181,12 +181,12 @@ def _header(g: ContainerGeom, p: ContainerParams) -> list[str]:
             rdt = rv.date if hasattr(rv, "date") else rv.get("date", "")
             rds = rv.description if hasattr(rv, "description") else rv.get("description", "")
             cy = ry + row_h / 2 + 1.0
-            s.append(text(colx["REV.No"][0] + colx["REV.No"][1] / 2, cy, rno, 1.7, weight="bold"))
-            s.append(text(colx["DESCRIPTION"][0] + 1.5, cy, (rds or "")[:34], 1.5, anchor="start"))
-            s.append(text(colx["DATE"][0] + colx["DATE"][1] / 2, cy, rdt, 1.5))
+            s.append(text(colx["REV.No"][0] + colx["REV.No"][1] / 2, cy, rno, 2.1, weight="bold"))
+            s.append(text(colx["DESCRIPTION"][0] + 1.5, cy, (rds or "")[:30], 1.9, anchor="start"))
+            s.append(text(colx["DATE"][0] + colx["DATE"][1] / 2, cy, rdt, 1.9))
     # allowable deviations table (right)
     s.append(text((xsplit + BORDER_R) / 2, y0 + 3.4,
-                  "ALLOWABLE DEVIATIONS FOR DIMENSIONS WITHOUT SPECIFIED TOLERANCES", 1.7, weight="bold"))
+                  "ALLOWABLE DEVIATIONS FOR DIMENSIONS WITHOUT SPECIFIED TOLERANCES", 2.0, weight="bold"))
     s.append(line(xsplit, y0 + 5, BORDER_R, y0 + 5, THIN))
     s.append(line(xsplit, y0 + 5 + 4.75, BORDER_R, y0 + 5 + 4.75, THIN))
     lblw = 22.0
@@ -194,9 +194,9 @@ def _header(g: ContainerGeom, p: ContainerParams) -> list[str]:
     for r, (lbl, vals) in enumerate([("DIMENSIONS", ["0.5-6", "6-30", "30-120", "120-315"]),
                                      ("TOLERANCES", ["±0.1", "±0.2", "±0.3", "±0.5"])]):
         yy = y0 + 5 + r * 4.75
-        s.append(text(xsplit + lblw / 2, yy + 3.2, lbl, 1.9))
+        s.append(text(xsplit + lblw / 2, yy + 3.2, lbl, 2.3))
         for i, v in enumerate(vals):
-            s.append(text(xsplit + lblw + colw * (i + 0.5), yy + 3.2, v, 1.9))
+            s.append(text(xsplit + lblw + colw * (i + 0.5), yy + 3.2, v, 2.3))
     for i in range(5):
         s.append(line(xsplit + lblw + colw * i, y0 + 5, xsplit + lblw + colw * i, y1, THIN))
     s.append(line(xsplit + lblw, y0 + 5, xsplit + lblw, y1, THIN))
@@ -254,8 +254,8 @@ def _footer(g: ContainerGeom, p: ContainerParams) -> list[str]:
                ("QTY/NOS", x3, x4, "01"), ("REF.DRG.NO", x4, x5, p.drawing_no)]
         for name, a, b, val in bom:
             s.append(line(b, strip_top, b, tt, THIN))
-            s.append(text((a + b) / 2, strip_mid - 1.5, val, 1.8))
-            s.append(text((a + b) / 2, strip_mid + 3.6, name, 1.7, weight="bold"))
+            s.append(text((a + b) / 2, strip_mid - 1.5, val, 2.2))
+            s.append(text((a + b) / 2, strip_mid + 3.6, name, 2.1, weight="bold"))
     else:
         s.append(rect(x7, strip_top, x10 - x7, tt - strip_top, MED))
     s.append(line(x7, strip_mid, x10, strip_mid, THIN))
@@ -265,8 +265,8 @@ def _footer(g: ContainerGeom, p: ContainerParams) -> list[str]:
            ("WEIGHT (Grams)", x9, x10, p.weight or "—")]
     for name, a, b, val in mat:
         s.append(line(b, strip_top, b, tt, THIN))
-        s.append(text((a + b) / 2, strip_mid - 1.5, val, 1.9))
-        s.append(text((a + b) / 2, strip_mid + 3.6, name, 1.6, weight="bold"))
+        s.append(text((a + b) / 2, strip_mid - 1.5, val, 2.3))
+        s.append(text((a + b) / 2, strip_mid + 3.6, name, 2.0, weight="bold"))
 
     # ---- title block dividers ----
     s.append(line(x5, tt, x5, ty, MED))          # PROJECT | RES (upper only)
@@ -274,56 +274,56 @@ def _footer(g: ContainerGeom, p: ContainerParams) -> list[str]:
     s.append(line(BORDER_L, tt, BORDER_R, tt, MED))
 
     # Col 1-4: PROJECT
-    s.append(text(x1 + 2, tt + 4, "PROJECT", 2.0, anchor="start"))
-    s.append(text((x1 + x5) / 2, tt + 13, p.project or "—", 3.8, weight="bold"))
+    s.append(text(x1 + 2, tt + 4, "PROJECT", 2.4, anchor="start"))
+    s.append(text((x1 + x5) / 2, tt + 13, p.project or "—", 4.2, weight="bold"))
     if p.battery_code:
-        s.append(text((x1 + x5) / 2, tt + 19, f"({p.battery_code})", 2.4, weight="bold"))
+        s.append(text((x1 + x5) / 2, tt + 19, f"({p.battery_code})", 2.8, weight="bold"))
     # Col 5: RES logo (real, embedded)
     s += _res_logo((x5 + x6) / 2, (tt + ty) / 2, box_w=x6 - x5 - 2)
     # TITLE block spans cols 1-5 (below PROJECT/RES)
     s.append(line(x1, ty, x6, ty, MED))
-    s.append(text(x1 + 2, ty + 4, "TITLE", 2.0, anchor="start"))
-    s.append(text((x1 + x6) / 2, ty + 16, p.component_name, 4.4, weight="bold"))
+    s.append(text(x1 + 2, ty + 4, "TITLE", 2.4, anchor="start"))
+    s.append(text((x1 + x6) / 2, ty + 16, p.component_name, 4.8, weight="bold"))
 
     # ---- right grid (cols 6-9) ----
     # SCALE (6-7 span) / ALL DIMNS ; REV (col8) ; projection symbol (col9)
     s.append(line(x6, r_sc, x8, r_sc, THIN))
     s.append(line(x6, r_dm, x8, r_dm, MED))
-    s.append(text(x6 + 2, r_sc - 2, "SCALE : NTS", 2.1, anchor="start"))
-    s.append(text(x6 + 2, r_dm - 2, 'ALL DIMNS. ARE IN "mm"', 2.0, anchor="start"))
+    s.append(text(x6 + 2, r_sc - 2, "SCALE : NTS", 2.5, anchor="start"))
+    s.append(text(x6 + 2, r_dm - 2, 'ALL DIMNS. ARE IN "mm"', 2.4, anchor="start"))
     s.append(line(x8, tt, x8, r_dm, MED))
     s.append(line(x9, tt, x9, r_dm, MED))
     s.append(line(x8, r_sc, x9, r_sc, THIN))
-    s.append(text((x8 + x9) / 2, r_sc - 2, "REV.No", 1.9))
+    s.append(text((x8 + x9) / 2, r_sc - 2, "REV.No", 2.3))
     _revs = getattr(p, "revisions", None) or []
     _last = _revs[-1] if _revs else None
     _lastrev = (_last.rev if hasattr(_last, "rev") else _last.get("rev", "")) if _last else ""
-    s.append(text((x8 + x9) / 2, r_dm - 2, _lastrev, 2.4, weight="bold"))
+    s.append(text((x8 + x9) / 2, r_dm - 2, _lastrev, 2.8, weight="bold"))
     s += _proj_symbol((x9 + x10) / 2, (tt + r_dm) / 2)
     s.append(line(x6, r_dm, x10, r_dm, MED))
     # DATE | NAME | SIGN header (col7=DATE, col8=NAME, col9=SIGN; col6=label)
     for xd in (x7, x8, x9):
         s.append(line(xd, r_dm, xd, comp_y, THIN))
-    s.append(text((x7 + x8) / 2, r_hdr - 1.6, "DATE", 1.9))
-    s.append(text((x8 + x9) / 2, r_hdr - 1.6, "NAME", 1.9))
-    s.append(text((x9 + x10) / 2, r_hdr - 1.6, "SIGN.", 1.9))
+    s.append(text((x7 + x8) / 2, r_hdr - 1.6, "DATE", 2.3))
+    s.append(text((x8 + x9) / 2, r_hdr - 1.6, "NAME", 2.3))
+    s.append(text((x9 + x10) / 2, r_hdr - 1.6, "SIGN.", 2.3))
     s.append(line(x6, r_hdr, x10, r_hdr, THIN))
     rows = ["DRAWN", "DESIGN", "PRODUCTION", "QUALITY"]
     rh = (comp_y - r_hdr) / 4
     for i, rl in enumerate(rows):
         ry = r_hdr + i * rh
-        s.append(text(x6 + 2, ry + rh / 2 + 1, rl, 1.9, anchor="start"))
+        s.append(text(x6 + 2, ry + rh / 2 + 1, rl, 2.3, anchor="start"))
         if i:
             s.append(line(x6, ry, x10, ry, THIN))
         if p.date:      # generation date on every sign-off row (DD/MM/YYYY)
-            s.append(text((x7 + x8) / 2, ry + rh / 2 + 1, p.date, 2.0))
+            s.append(text((x7 + x8) / 2, ry + rh / 2 + 1, p.date, 2.4))
 
     # ---- bottom: company (cols 1-5) + DRAWING NO (cols 6-9) ----
     s.append(line(BORDER_L, comp_y, BORDER_R, comp_y, MED))
     s.append(line(x6, comp_y, x6, bot, MED))
-    s.append(text((x1 + x6) / 2, comp_y + 4, "RENEWABLE ENERGY SYSTEMS LIMITED", 2.0, weight="bold"))
-    s.append(text((x1 + x6) / 2, comp_y + 7, "HYDERABAD, INDIA.", 2.0, weight="bold"))
-    s.append(text((x6 + BORDER_R) / 2, comp_y + 5.6, f"DRAWING NO. :  {p.drawing_no}", 2.6, weight="bold"))
+    s.append(text((x1 + x6) / 2, comp_y + 4, "RENEWABLE ENERGY SYSTEMS LIMITED", 2.4, weight="bold"))
+    s.append(text((x1 + x6) / 2, comp_y + 7, "HYDERABAD, INDIA.", 2.4, weight="bold"))
+    s.append(text((x6 + BORDER_R) / 2, comp_y + 5.6, f"DRAWING NO. :  {p.drawing_no}", 3.0, weight="bold"))
     return s
 
 

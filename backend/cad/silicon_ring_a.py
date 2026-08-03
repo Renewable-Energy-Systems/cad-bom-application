@@ -66,7 +66,7 @@ def compute_silicon_ring_a(p: SiliconRingAParams) -> SiliconRingAGeom:
 def _views(g: SiliconRingAGeom, p: SiliconRingAParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    cx = ax0 + (ax1 - ax0) * 0.38
+    cx = ax0 + (ax1 - ax0) * 0.46
     sv = min((ax1 - ax0 - 96) / g.outer_dia, (ay1 - ay0 - 84) / g.outer_dia)
     r = max(22.0, min(g.outer_dia * sv / 2, 42.0))
     ri = g.inner_dia / g.outer_dia * r
