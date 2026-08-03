@@ -63,7 +63,10 @@ app = FastAPI(title="CAD-BOM V1 — Input + Validation Layer")
 async def _no_cache_frontend(request, call_next):
     resp = await call_next(request)
     path = request.url.path
-    if path == "/" or path.endswith((".js", ".css", ".html")):
+    if path.startswith("/vendor/"):
+        # pinned third-party libs (React/Babel) — cache hard, they never change
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path == "/" or path.endswith((".js", ".css", ".html")):
         resp.headers["Cache-Control"] = "no-store, must-revalidate"
     return resp
 

@@ -5,3 +5,9 @@ pymupdf
 google-genai
 pydantic
 openpyxl
+
+# PDF export (POST /api/cad/pdf) — merges the generated SVG drawings into one
+# multi-page A4 PDF. Imported lazily, so the app still starts without them;
+# only the "Download PDF" action fails (HTTP 500) if they are absent.
+svglib
+reportlab
