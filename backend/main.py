@@ -36,6 +36,8 @@ from .validation.table1 import add_row, build_table1
 from .validation.tolerances import apply_general_tolerance, nominal_of
 from .cad.container import ContainerParams, compute_geometry, render_container_svg
 from .cad.lid import LidParams, compute_lid_geometry, render_lid_svg
+from .cad.lid_assembly import (LidAssemblyParams, compute_lid_assembly,
+                               render_lid_assembly_svg, DEFAULT_NOTES)
 from .cad.tie_wire import TieWireParams, compute_tie_wire, render_tie_wire_svg
 from .cad.teflon_disc import TeflonParams, compute_teflon, render_teflon_svg
 from .cad.pellet import (PelletParams, compute_pellet, render_pellet_svg,
@@ -51,6 +53,11 @@ from .cad.samica_wrap import (SamicaWrapParams, compute_samica_wrap, render_sami
 from .cad.fiberfrax_sheet import (FiberfraxSheetParams, compute_fiberfrax_sheet, render_fiberfrax_sheet_svg)
 from .cad.current_collector import (CurrentCollectorParams, compute_current_collector, render_current_collector_svg)
 from .cad.brace_plate import (BracePlateParams, compute_brace_plate, render_brace_plate_svg)
+from .cad.squib import (SquibParams, compute_squib, render_squib_svg, SQUIB_TYPES)
+from .cad.mica_disc_cuts import (MicaDiscCutsParams, compute_mica_disc_cuts,
+                                 render_mica_disc_cuts_svg)
+from .cad.lid_tie_wire import (LidTieWireParams, compute_lid_tie_wire,
+                               render_lid_tie_wire_svg)
 from .cad.deliver_pin import (DeliverPinParams, compute_deliver_pin, render_deliver_pin_svg)
 from .cad.assembly import (AssemblyParams, AssemblyPiece, compute_assembly, render_assembly_svg)
 from .cad.stack import (StackParams, compute_stack, render_stack_svg)
@@ -616,6 +623,178 @@ def cad_lid(req: LidRequest, user: str = Depends(require_auth)):
         "revisions": [r.dict() for r in p.revisions],
         "warnings": g.warnings,
     }
+
+
+# ---- CAD: LID assembly (lid blank + deliver pins + G.M. seal) --------------
+def _component_geom(job, ctype: str) -> dict:
+    """Geometry stored on an already-generated component (empty if not made yet)."""
+    if not job:
+        return {}
+    c = next((c for c in job.cad_components if c.ctype == ctype), None)
+    return dict(c.geometry or {}) if c else {}
+
+
+class LidAssemblyRequest(BaseModel):
+    job_id: Optional[str] = None
+    seq: Optional[int] = None
+    lid_od: Optional[float] = None
+    lid_thickness: Optional[float] = None
+    pcd: Optional[float] = None
+    num_holes: Optional[int] = None
+    hole_dia: Optional[float] = None
+    pin_dia: Optional[float] = None
+    pin_length: Optional[float] = None
+    upper_part: Optional[float] = None
+    bottom_side: Optional[float] = None
+    groove_depth: Optional[float] = None
+    groove_width: Optional[float] = None
+    weld_space: Optional[float] = None
+    edge_angle: Optional[float] = None
+    lid_od_tol: Optional[str] = None
+    pin_dia_tol: Optional[str] = None
+    pin_length_tol: Optional[str] = None
+    thickness_tol: Optional[str] = None
+    hole_start_angle: Optional[float] = None
+    notes: Optional[List[str]] = None
+    revision_note: Optional[str] = None
+
+
+@app.post("/api/cad/lid_assembly")
+def cad_lid_assembly(req: LidAssemblyRequest, user: str = Depends(require_auth)):
+    """The finished LID: the LID BLANK with a DELIVER PIN seated in each pin hole
+    and the surrounding annulus filled with G.M. seal.
+
+    Dimensions are taken from the two child drawings this app already generated
+    (so a CAD Revision to either flows straight through); anything not generated
+    yet is derived from the battery data exactly as those endpoints would."""
+    job = store.load(req.job_id) if req.job_id else None
+    if req.job_id and not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    lid_g = _component_geom(job, "lid_blank")
+    pin_g = _component_geom(job, "deliver_pin")
+
+    lid_od = req.lid_od or lid_g.get("lid_od")
+    thickness = req.lid_thickness or lid_g.get("thickness")
+    pcd = req.pcd or lid_g.get("pcd")
+    num_holes = req.num_holes or lid_g.get("num_holes")
+    hole_dia = req.hole_dia or lid_g.get("hole_dia")
+    pin_dia = req.pin_dia or pin_g.get("pin_dia") or lid_g.get("pin_dia")
+    # pin_length is DERIVED (upper part + lid thickness + bottom side) further
+    # down — only an explicit override is taken here, so editing the upper part
+    # in CAD Revision actually moves the total length.
+    pin_length = req.pin_length
+    upper = req.upper_part if req.upper_part is not None else pin_g.get("upper_part")
+    bottom = req.bottom_side if req.bottom_side is not None else pin_g.get("bottom_side")
+    # edge features, so Section A-A reproduces the LID BLANK's own section
+    groove_depth = req.groove_depth or lid_g.get("groove_depth")
+    groove_width = req.groove_width or lid_g.get("groove_width")
+    weld_space = req.weld_space or lid_g.get("weld_space")
+    edge_angle = req.edge_angle or lid_g.get("edge_angle")
+
+    project = ""
+    if job:
+        project = job.battery_name or ""
+        # Fall back to the battery data for anything the child drawings don't
+        # supply — same resolution order the LID BLANK / DELIVER PIN endpoints use.
+        od = _design_value(job, "Container OD") or _table1_value(job, "Diameter of Battery")
+        if (lid_od is None or thickness is None or hole_dia is None or pcd is None
+                or not num_holes or groove_depth is None or weld_space is None):
+            cid = _design_value(job, "Container ID")
+            cathode = _design_value(job, "Cathode Dia") or _pid_electrode_dia(job, "cathode")
+            lp = LidParams(
+                container_od=float(od) if od else 0.0, container_id=cid, cathode_dia=cathode,
+                pcd=pcd or _table1_value(job, "Pin PCD"),
+                num_holes=int(num_holes) if num_holes else (
+                    int(_table1_value(job, "Number of Holes"))
+                    if _table1_value(job, "Number of Holes") else None),
+                pin_dia=pin_dia or _table1_value(job, "Diameter of the Pin"),
+                hole_dia=hole_dia, thickness=thickness)
+            if od:
+                lg = compute_lid_geometry(lp)
+                lid_od = lid_od or lg.lid_od
+                thickness = thickness or lg.thickness
+                pcd = pcd or lg.pcd
+                num_holes = num_holes or lg.num_holes
+                hole_dia = hole_dia or lg.hole_dia
+                pin_dia = pin_dia or lg.pin_dia
+                groove_depth = groove_depth or lg.groove_depth
+                groove_width = groove_width or lg.groove_width
+                weld_space = weld_space or lg.weld_space
+                edge_angle = edge_angle or lg.edge_angle
+        if pin_dia is None:
+            pin_dia = _table1_value(job, "Diameter of the Pin")
+        if upper is None:
+            upper = (_table1_value(job, "Upper Part of the Pin")
+                     or _table1_value(job, "Upper Part of Pin"))
+
+    # Total pin length = upper part + lid thickness + bottom side (the same rule
+    # the DELIVER PIN drawing uses). Recomputed every time so a change to any of
+    # the three drivers moves it; the child's own figure is only a last resort.
+    if pin_length is None:
+        if upper is not None and thickness is not None:
+            pin_length = round(float(upper) + float(thickness) + float(bottom or 0), 2)
+        else:
+            pin_length = pin_g.get("pin_length")
+
+    missing = [n for n, v in (("lid OD", lid_od), ("lid thickness", thickness),
+                              ("pin PCD", pcd), ("number of holes", num_holes),
+                              ("hole dia", hole_dia), ("pin dia", pin_dia),
+                              ("total pin length", pin_length),
+                              ("upper part of the pin", upper)) if not v]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=("LID: " + ", ".join(missing) + " not found. Generate the LID BLANK "
+                    "and DELIVER PIN drawings first, or set these in CAD Revision."))
+
+    seq, code, drawing_no = _next_component(job, "lid_assembly", "LID", req.seq) if job else (1, "", "RES-__-01")
+    p = LidAssemblyParams(
+        lid_od=float(lid_od), lid_thickness=float(thickness), pcd=float(pcd),
+        num_holes=int(num_holes), hole_dia=float(hole_dia), pin_dia=float(pin_dia),
+        pin_length=float(pin_length), upper_part=float(upper),
+        groove_depth=float(groove_depth or 0), groove_width=float(groove_width or 0),
+        weld_space=float(weld_space or 0), edge_angle=float(edge_angle or 6.0),
+        lid_od_tol=req.lid_od_tol or "+0.05 / -0.15",
+        pin_dia_tol=req.pin_dia_tol or "±0.1",
+        pin_length_tol=req.pin_length_tol or "±0.2",
+        thickness_tol=req.thickness_tol or "",
+        hole_start_angle=req.hole_start_angle if req.hole_start_angle is not None else 0.0,
+        notes=req.notes if req.notes is not None else list(DEFAULT_NOTES),
+        lid_blank_drg=_find_drg_ctype(job, "lid_blank"),
+        deliver_pin_drg=_find_drg_ctype(job, "deliver_pin"),
+        component_name="LID", material="AS LISTED", project=project,
+        battery_code=code, drawing_no=drawing_no,
+        date=datetime.now().strftime("%d/%m/%Y"))
+    g = compute_lid_assembly(p)
+    geom = {"lid_od": g.lid_od, "lid_thickness": g.lid_thickness, "pcd": g.pcd,
+            "num_holes": g.num_holes, "hole_dia": g.hole_dia, "pin_dia": g.pin_dia,
+            "pin_length": g.pin_length, "upper_part": g.upper_part,
+            "bottom_side": g.bottom_side, "seal_width": g.seal_width,
+            "groove_depth": g.groove_depth, "groove_width": g.groove_width,
+            "weld_space": g.weld_space, "edge_angle": g.edge_angle}
+    # Every dimension on this sheet is DERIVED from the LID BLANK and DELIVER PIN
+    # drawings, so none of it is frozen — it is read back from those components on
+    # each render and a CAD Revision to either child flows straight through here.
+    # Only values the user explicitly overrode are stored (plus the presentation
+    # choices: tolerances, hole start angle and the notes).
+    params_used = {k: v for k, v in (
+        ("lid_od", req.lid_od), ("lid_thickness", req.lid_thickness),
+        ("pcd", req.pcd), ("num_holes", req.num_holes), ("hole_dia", req.hole_dia),
+        ("pin_dia", req.pin_dia), ("pin_length", req.pin_length),
+        ("upper_part", req.upper_part), ("bottom_side", req.bottom_side),
+        ("groove_depth", req.groove_depth), ("groove_width", req.groove_width),
+        ("weld_space", req.weld_space), ("edge_angle", req.edge_angle),
+    ) if v is not None}
+    params_used.update({
+        "lid_od_tol": p.lid_od_tol, "pin_dia_tol": p.pin_dia_tol,
+        "pin_length_tol": p.pin_length_tol, "thickness_tol": p.thickness_tol,
+        "hole_start_angle": p.hole_start_angle, "notes": p.notes})
+    p.revisions = _bump_revision(job, "lid_assembly", req.revision_note, params_used, geom)
+    return {"svg": render_lid_assembly_svg(g, p), "drawing_no": drawing_no,
+            "component_no": f"{seq:02d}", "geometry": geom, "params": params_used,
+            "revisions": [r.dict() for r in p.revisions], "warnings": g.warnings,
+            "ctype": "lid_assembly", "name": "LID"}
 
 
 class TieWireRequest(BaseModel):
@@ -1655,6 +1834,409 @@ def cad_current_collector_cathode(req: CurrentCollectorRequest, user: str = Depe
 
 
 # ---- CAD: Brace Plate (top view + section D-D + detail A) ------------------
+# ---- CAD: Squib (electro-explosive igniter) -------------------------------
+class SquibRequest(BaseModel):
+    job_id: Optional[str] = None
+    seq: Optional[int] = None
+    squib_type: str = "single_head"     # single_head | single_head_wired | double_head_igniter
+    total_length: Optional[float] = None
+    head_length: Optional[float] = None
+    head_width: Optional[float] = None
+    head_thickness: Optional[float] = None
+    head_corner_radius: Optional[float] = None
+    head_end_radius: Optional[float] = None
+    strip_width: Optional[float] = None
+    strip_narrow_width: Optional[float] = None
+    strip_thickness: Optional[float] = None
+    body_height: Optional[float] = None
+    charge_height: Optional[float] = None
+    body_width: Optional[float] = None
+    base_width: Optional[float] = None
+    body_depth: Optional[float] = None
+    wire_length: Optional[float] = None
+    wire_dia: Optional[float] = None
+    wire_spacing: Optional[float] = None
+    wire_span_inner: Optional[float] = None
+    wire_span_outer: Optional[float] = None
+    pellet_width_top: Optional[float] = None
+    pellet_width_bottom: Optional[float] = None
+    body_width_tol: Optional[str] = None
+    base_width_tol: Optional[str] = None
+    body_depth_tol: Optional[str] = None
+    body_height_tol: Optional[str] = None
+    wire_length_tol: Optional[str] = None
+    note_label: Optional[str] = None
+    resistance_min: Optional[float] = None
+    resistance_max: Optional[float] = None
+    revision_note: Optional[str] = None
+
+
+@app.post("/api/cad/squib")
+def cad_squib(req: SquibRequest, user: str = Depends(require_auth)):
+    """The squib is a standard bought-in part, so the dimensions are fixed
+    defaults rather than derived from the battery — all editable in CAD Revision.
+    Single Head and Single Head with Wired are both titled SQUIB."""
+    job = store.load(req.job_id) if req.job_id else None
+    if req.job_id and not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    st = req.squib_type if req.squib_type in SQUIB_TYPES else "single_head"
+    name = SQUIB_TYPES[st]
+    project = job.battery_name if job else ""
+    seq, code, drawing_no = _next_component(job, "squib", name, req.seq) if job else (1, "", "RES-__-01")
+    defaults = SquibParams()
+    p = SquibParams(
+        squib_type=st,
+        total_length=req.total_length or defaults.total_length,
+        head_length=req.head_length or defaults.head_length,
+        head_width=req.head_width or defaults.head_width,
+        head_thickness=req.head_thickness or defaults.head_thickness,
+        head_corner_radius=req.head_corner_radius,
+        head_end_radius=req.head_end_radius,
+        strip_width=req.strip_width or defaults.strip_width,
+        strip_narrow_width=req.strip_narrow_width,
+        strip_thickness=req.strip_thickness or defaults.strip_thickness,
+        body_height=req.body_height or getattr(defaults, 'body_height'),
+        charge_height=req.charge_height or getattr(defaults, 'charge_height'),
+        body_width=req.body_width or getattr(defaults, 'body_width'),
+        base_width=req.base_width or getattr(defaults, 'base_width'),
+        body_depth=req.body_depth or getattr(defaults, 'body_depth'),
+        wire_length=req.wire_length or getattr(defaults, 'wire_length'),
+        wire_dia=req.wire_dia or getattr(defaults, 'wire_dia'),
+        wire_spacing=req.wire_spacing or getattr(defaults, 'wire_spacing'),
+        wire_span_inner=req.wire_span_inner or getattr(defaults, 'wire_span_inner'),
+        wire_span_outer=req.wire_span_outer or getattr(defaults, 'wire_span_outer'),
+        pellet_width_top=req.pellet_width_top or getattr(defaults, 'pellet_width_top'),
+        pellet_width_bottom=req.pellet_width_bottom or getattr(defaults, 'pellet_width_bottom'),
+        body_width_tol=req.body_width_tol or getattr(defaults, 'body_width_tol'),
+        base_width_tol=req.base_width_tol or getattr(defaults, 'base_width_tol'),
+        body_depth_tol=req.body_depth_tol or getattr(defaults, 'body_depth_tol'),
+        body_height_tol=req.body_height_tol or getattr(defaults, 'body_height_tol'),
+        wire_length_tol=req.wire_length_tol or getattr(defaults, 'wire_length_tol'),
+        note_label=req.note_label or defaults.note_label,
+        resistance_min=req.resistance_min if req.resistance_min is not None else defaults.resistance_min,
+        resistance_max=req.resistance_max if req.resistance_max is not None else defaults.resistance_max,
+        component_name=name, material="AS LISTED", project=project,
+        battery_code=code, drawing_no=drawing_no,
+        date=datetime.now().strftime("%d/%m/%Y"))
+    g = compute_squib(p)
+    geom = {"squib_type": g.squib_type, "total_length": g.total_length,
+            "strip_length": g.strip_length, "head_length": g.head_length,
+            "head_width": g.head_width, "head_thickness": g.head_thickness,
+            "head_corner_radius": g.head_corner_radius,
+        "head_end_radius": g.head_end_radius,
+            "head_end_radius": g.head_end_radius,
+            "strip_width": g.strip_width, "strip_narrow_width": g.strip_narrow_width,
+            "strip_thickness": g.strip_thickness,
+            "body_height": g.body_height,
+            "charge_height": g.charge_height,
+            "body_width": g.body_width,
+            "base_width": g.base_width,
+            "body_depth": g.body_depth,
+            "wire_length": g.wire_length,
+            "wire_dia": g.wire_dia,
+            "wire_spacing": g.wire_spacing,
+            "wire_span_inner": g.wire_span_inner,
+            "wire_span_outer": g.wire_span_outer,
+        "pellet_width_top": g.pellet_width_top,
+        "pellet_width_bottom": g.pellet_width_bottom,
+            "pellet_width_top": g.pellet_width_top,
+            "pellet_width_bottom": g.pellet_width_bottom,
+            "base_height": g.base_height,
+            "body_height": g.body_height,
+        "charge_height": g.charge_height,
+        "body_width": g.body_width,
+        "base_width": g.base_width,
+        "body_depth": g.body_depth,
+        "wire_length": g.wire_length,
+        "wire_dia": g.wire_dia,
+        "wire_spacing": g.wire_spacing,
+        "wire_span_inner": g.wire_span_inner,
+        "wire_span_outer": g.wire_span_outer,
+        "body_width_tol": p.body_width_tol,
+        "base_width_tol": p.base_width_tol,
+        "body_depth_tol": p.body_depth_tol,
+        "body_height_tol": p.body_height_tol,
+        "wire_length_tol": p.wire_length_tol,
+        "note_label": p.note_label,
+        "resistance_min": g.resistance_min, "resistance_max": g.resistance_max}
+    params_used = {
+        # strip_length is DERIVED (overall - head) — never frozen, so changing
+        # either driver recomputes it.
+        "squib_type": st, "total_length": g.total_length, "head_length": g.head_length,
+        "head_width": g.head_width, "head_thickness": g.head_thickness,
+        "head_corner_radius": g.head_corner_radius,
+        "strip_width": g.strip_width, "strip_narrow_width": g.strip_narrow_width,
+        "strip_thickness": g.strip_thickness,
+        "resistance_min": g.resistance_min, "resistance_max": g.resistance_max}
+    p.revisions = _bump_revision(job, "squib", req.revision_note, params_used, geom)
+    return {"svg": render_squib_svg(g, p), "drawing_no": drawing_no,
+            "component_no": f"{seq:02d}", "geometry": geom, "params": params_used,
+            "revisions": [r.dict() for r in p.revisions], "warnings": g.warnings,
+            "ctype": "squib", "name": name}
+
+
+# ---- CAD: Lid with Tie Wire -----------------------------------------------
+class LidTieWireRequest(BaseModel):
+    job_id: Optional[str] = None
+    seq: Optional[int] = None
+    lid_od: Optional[float] = None
+    lid_thickness: Optional[float] = None
+    pcd: Optional[float] = None
+    num_holes: Optional[int] = None
+    hole_dia: Optional[float] = None
+    stack_dia: Optional[float] = None
+    num_tie_wires: Optional[int] = None
+    wire_width: Optional[float] = None
+    wire_thickness: Optional[float] = None
+    start_offset: Optional[float] = None
+    weld_length: Optional[float] = None
+    groove_circle_dia: Optional[float] = None
+    hole_start_angle: Optional[float] = None
+    weld_strength: Optional[str] = None
+    revision_note: Optional[str] = None
+
+
+@app.post("/api/cad/lid_tie_wire")
+def cad_lid_tie_wire(req: LidTieWireRequest, user: str = Depends(require_auth)):
+    """Back side of the LID BLANK with the nickel tie wires welded on.
+
+    Everything is read from the drawings already generated for this battery, so
+    the sheet is specific to it — the lid from LID BLANK, the strip from TIE
+    WIRE, the stack diameter and wire count from the battery data."""
+    job = store.load(req.job_id) if req.job_id else None
+    if req.job_id and not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    lid_g = _component_geom(job, "lid_blank")
+    tw_g = _component_geom(job, "tie_wire")
+
+    lid_od = req.lid_od or lid_g.get("lid_od")
+    lid_t = req.lid_thickness or lid_g.get("thickness")
+    pcd = req.pcd or lid_g.get("pcd")
+    n_holes = req.num_holes or lid_g.get("num_holes")
+    hole_dia = req.hole_dia or lid_g.get("hole_dia")
+    start_ang = req.hole_start_angle
+    if start_ang is None:
+        start_ang = lid_g.get("hole_start_angle", 90.0)
+    stack = req.stack_dia
+    n_wires = req.num_tie_wires
+    ww = req.wire_width or tw_g.get("width")
+    wt = req.wire_thickness or tw_g.get("thickness")
+    project = ""
+
+    if job:
+        project = job.battery_name or ""
+        stack = stack or _pid_electrode_dia(job, "cathode") or _design_value(job, "Cathode Dia")
+        n_wires = n_wires or _pid_config_int(job, "tie wire")
+        od = _design_value(job, "Container OD") or _table1_value(job, "Diameter of Battery")
+        if ww is None and od:
+            ww = tie_wire_width(od)
+        # fall back to the lid geometry the LID BLANK endpoint would have derived
+        if lid_od is None or pcd is None or not n_holes or hole_dia is None or lid_t is None:
+            cid = _design_value(job, "Container ID")
+            lp = LidParams(
+                container_od=float(od) if od else 0.0, container_id=cid,
+                cathode_dia=stack, pcd=pcd or _table1_value(job, "Pin PCD"),
+                num_holes=int(n_holes) if n_holes else (
+                    int(_table1_value(job, "Number of Holes"))
+                    if _table1_value(job, "Number of Holes") else None),
+                pin_dia=_table1_value(job, "Diameter of the Pin"),
+                hole_dia=hole_dia, thickness=lid_t)
+            if od:
+                lg = compute_lid_geometry(lp)
+                lid_od = lid_od or lg.lid_od
+                lid_t = lid_t or lg.thickness
+                pcd = pcd or lg.pcd
+                n_holes = n_holes or lg.num_holes
+                hole_dia = hole_dia or lg.hole_dia
+
+    missing = [n for n, v in (("lid OD", lid_od), ("lid thickness", lid_t),
+                              ("pin PCD", pcd), ("number of holes", n_holes),
+                              ("hole dia", hole_dia), ("stack (cathode) dia", stack))
+               if not v]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=("Lid with Tie Wire: " + ", ".join(missing) + " not found. Generate "
+                    "the LID BLANK and TIE WIRE drawings first, or set these in CAD Revision."))
+
+    n_wires = int(n_wires) if n_wires else 3
+    p = LidTieWireParams(
+        lid_od=float(lid_od), lid_thickness=float(lid_t), pcd=float(pcd),
+        num_holes=int(n_holes), hole_dia=float(hole_dia), stack_dia=float(stack),
+        num_tie_wires=n_wires, wire_width=float(ww) if ww else 3.0,
+        wire_thickness=float(wt) if wt else 0.3,
+        start_offset=req.start_offset if req.start_offset is not None else 5.0,
+        weld_length=req.weld_length if req.weld_length is not None else 5.0,
+        # section detail, straight off the LID BLANK / DELIVER PIN drawings
+        groove_depth=lid_g.get("groove_depth") or 1.0,
+        groove_width=lid_g.get("groove_width") or 1.0,
+        weld_space=lid_g.get("weld_space") or 1.1,
+        edge_angle=lid_g.get("edge_angle") or 6.0,
+        pin_dia=lid_g.get("pin_dia") or _component_geom(job, "deliver_pin").get("pin_dia"),
+        pin_upper=_component_geom(job, "deliver_pin").get("upper_part") or 0.0,
+        groove_circle_dia=req.groove_circle_dia,
+        hole_start_angle=float(start_ang) if start_ang is not None else 90.0,
+        weld_strength=req.weld_strength or "25kgf",
+        # prefer the finished LID; fall back to the LID BLANK if it isn't drawn yet
+        lid_drg=(_find_drg_ctype(job, "lid_assembly")
+                 or _find_drg_ctype(job, "lid_blank")),
+        tie_wire_drg=_find_drg_ctype(job, "tie_wire"),
+        component_name="LID WITH TIE WIRE", material="AS LISTED", project=project,
+        battery_code="", drawing_no="RES-__-01", quantity="01",
+        date=datetime.now().strftime("%d/%m/%Y"))
+    seq, code, drawing_no = _next_component(
+        job, "lid_tie_wire", "LID WITH TIE WIRE", req.seq) if job else (1, "", "RES-__-01")
+    p.battery_code, p.drawing_no = code, drawing_no
+    g = compute_lid_tie_wire(p)
+    geom = {"lid_od": g.lid_od, "lid_thickness": g.lid_thickness, "pcd": g.pcd,
+            "num_holes": g.num_holes, "hole_dia": g.hole_dia, "theta": g.theta,
+            "stack_dia": g.stack_dia, "num_tie_wires": g.num_tie_wires,
+            "wire_angle": g.wire_angle, "wire_width": g.wire_width,
+            "wire_thickness": g.wire_thickness, "wire_start_dia": g.wire_start_dia,
+            "weld_length": g.weld_length, "groove_circle_dia": g.groove_circle_dia,
+            "groove_depth": g.groove_depth, "groove_width": g.groove_width,
+            "weld_space": g.weld_space, "edge_angle": g.edge_angle,
+            "pin_dia": g.pin_dia, "pin_upper": g.pin_upper,
+            "hole_angles": g.hole_angles, "wire_angles": g.wire_angles,
+            "hole_clearance": g.hole_clearance, "wire_anchor": g.wire_anchor}
+    params_used = {
+        # Dimensions come from the LID BLANK / TIE WIRE drawings and are NOT
+        # frozen — revising either flows through. Only explicit entries persist.
+        k: v for k, v in (
+            ("lid_od", req.lid_od), ("lid_thickness", req.lid_thickness),
+            ("pcd", req.pcd), ("num_holes", req.num_holes), ("hole_dia", req.hole_dia),
+            ("stack_dia", req.stack_dia), ("num_tie_wires", req.num_tie_wires),
+            ("wire_width", req.wire_width), ("wire_thickness", req.wire_thickness),
+            ("groove_circle_dia", req.groove_circle_dia),
+        ) if v is not None}
+    params_used.update({"start_offset": p.start_offset, "weld_length": p.weld_length,
+                        "hole_start_angle": p.hole_start_angle,
+                        "weld_strength": p.weld_strength})
+    p.revisions = _bump_revision(job, "lid_tie_wire", req.revision_note, params_used, geom)
+    return {"svg": render_lid_tie_wire_svg(g, p), "drawing_no": drawing_no,
+            "component_no": f"{seq:02d}", "geometry": geom, "params": params_used,
+            "revisions": [r.dict() for r in p.revisions], "warnings": g.warnings,
+            "ctype": "lid_tie_wire", "name": "LID WITH TIE WIRE"}
+
+
+# ---- CAD: Silicon Bonded Mica Disc (2 Cuts) -------------------------------
+class MicaDiscCutsRequest(BaseModel):
+    job_id: Optional[str] = None
+    seq: Optional[int] = None
+    disc_dia: Optional[float] = None
+    num_cuts: Optional[int] = None
+    cut_length: Optional[float] = None
+    cut_width: Optional[float] = None
+    cut_clearance: Optional[float] = None      # added to the squib head size
+    thickness: Optional[float] = None
+    dia_tol: Optional[str] = None
+    cut_start_angle: Optional[float] = None
+    revision_note: Optional[str] = None
+
+
+def _squib_head_size(job) -> tuple:
+    """(length, width, how) of the generated SQUIB, for sizing the cuts it sits in.
+
+    Whatever type is currently generated governs — the values are read from that
+    drawing every time, never fixed.
+
+      Single Head       -> total length 12.5, head width 3.8
+      Single Head Wired -> body height 11 (leads excluded), body width 4
+    """
+    sg = _component_geom(job, "squib")
+    if not sg:
+        return None, None, ""
+    if sg.get("squib_type") == "single_head_wired":
+        ln, wd = sg.get("body_height"), sg.get("body_width")
+        how = (f"Single Head with Wired — body {_n2(ln)} long (leads excluded), "
+               f"{_n2(wd)} wide")
+    else:
+        ln, wd = sg.get("total_length"), sg.get("head_width")
+        how = f"Single Head — {_n2(ln)} long, {_n2(wd)} wide"
+    return ln, wd, how
+
+
+def _n2(v):
+    return "?" if v is None else (f"{float(v):g}")
+
+
+def _disc_cuts_endpoint(req: "MicaDiscCutsRequest", ctype: str, name: str,
+                        material: str, std_thickness: float):
+    """Disc at cathode diameter with equally-spaced radial cuts, each sized from
+    the SQUIB drawing: squib length + clearance long, squib width + clearance
+    wide. Shared by every disc of this form — only the material and the standard
+    thickness differ."""
+    job = store.load(req.job_id) if req.job_id else None
+    if req.job_id and not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    dia = req.disc_dia
+    project = ""
+    if job:
+        dia = dia or _pid_electrode_dia(job, "cathode") or _design_value(job, "Cathode Dia")
+        project = job.battery_name or ""
+    if dia is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{name}: cathode diameter not found — set the disc dia in CAD Revision.")
+
+    clr = req.cut_clearance if req.cut_clearance is not None else 2.0
+    cut_len, cut_wid = req.cut_length, req.cut_width
+    src = ""
+    if cut_len is None or cut_wid is None:
+        hl, hw, src = _squib_head_size(job)
+        if cut_len is None:
+            cut_len = round(float(hl) + clr, 2) if hl else None
+        if cut_wid is None:
+            cut_wid = round(float(hw) + clr, 2) if hw else None
+    if cut_len is None or cut_wid is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{name}: the cuts are sized from the SQUIB — generate the Squib "
+                   f"drawing first, or set the cut length and width in CAD Revision.")
+
+    n = int(req.num_cuts) if req.num_cuts else 2
+    seq, code, drawing_no = _next_component(job, ctype, name, req.seq) if job else (1, "", "RES-__-01")
+    p = MicaDiscCutsParams(
+        disc_dia=float(dia), num_cuts=n, cut_length=float(cut_len), cut_width=float(cut_wid),
+        thickness=req.thickness or std_thickness, dia_tol=req.dia_tol or "+0.00 / -0.20",
+        cut_start_angle=req.cut_start_angle if req.cut_start_angle is not None else 90.0,
+        component_name=name, material=material, project=project, battery_code=code,
+        drawing_no=drawing_no, quantity=f"{n:02d}",
+        date=datetime.now().strftime("%d/%m/%Y"))
+    g = compute_mica_disc_cuts(p)
+    geom = {"disc_dia": g.disc_dia, "num_cuts": g.num_cuts, "angle": g.angle,
+            "cut_length": g.cut_length, "cut_width": g.cut_width,
+            "cut_gap": g.cut_gap, "thickness": g.thickness,
+            "cut_start_angle": g.cut_start_angle, "cut_source": src}
+    params_used = {
+        # cut_length / cut_width are DERIVED from the SQUIB drawing — not frozen,
+        # so revising the squib resizes the cuts. Only explicit entries persist.
+        "disc_dia": req.disc_dia, "num_cuts": n, "cut_length": req.cut_length,
+        "cut_width": req.cut_width, "cut_clearance": clr, "thickness": g.thickness,
+        "dia_tol": p.dia_tol, "cut_start_angle": g.cut_start_angle}
+    params_used = {k: v for k, v in params_used.items() if v is not None}
+    p.revisions = _bump_revision(job, ctype, req.revision_note, params_used, geom)
+    return {"svg": render_mica_disc_cuts_svg(g, p), "drawing_no": drawing_no,
+            "component_no": f"{seq:02d}", "geometry": geom, "params": params_used,
+            "revisions": [r.dict() for r in p.revisions], "warnings": g.warnings,
+            "ctype": ctype, "name": name}
+
+
+@app.post("/api/cad/mica_disc_cuts")
+def cad_mica_disc_cuts(req: MicaDiscCutsRequest, user: str = Depends(require_auth)):
+    return _disc_cuts_endpoint(req, "mica_disc_cuts",
+                               "SILICON BONDED MICA DISC (2 CUTS)",
+                               "SILICON BONDED MICA", 1.0)
+
+
+@app.post("/api/cad/fiberfrax_disc_cuts")
+def cad_fiberfrax_disc_cuts(req: MicaDiscCutsRequest, user: str = Depends(require_auth)):
+    return _disc_cuts_endpoint(req, "fiberfrax_disc_cuts",
+                               "FIBERFRAX DISC (2 CUTS)", "FIBERFRAX", 1.6)
+
+
 class BracePlateRequest(BaseModel):
     job_id: Optional[str] = None
     seq: Optional[int] = None
@@ -1669,6 +2251,8 @@ class BracePlateRequest(BaseModel):
     bump_width: Optional[float] = None
     bump_height: Optional[float] = None
     bump_radius: Optional[float] = None
+    strip_width: Optional[float] = None
+    bump_plan_width: Optional[float] = None
     revision_note: Optional[str] = None
 
 
@@ -1700,17 +2284,20 @@ def cad_brace_plate(req: BracePlateRequest, user: str = Depends(require_auth)):
         plate_thickness=req.plate_thickness, plate_width=req.plate_width,
         bump_width=req.bump_width, bump_height=req.bump_height,
         bump_radius=req.bump_radius if req.bump_radius else 3.0,
+        strip_width=req.strip_width, bump_plan_width=req.bump_plan_width,
         component_name="BRACE PLATE", material="SS 304", project=project,
         battery_code=code, drawing_no=drawing_no, quantity=f"{int(n):02d}",
         date=datetime.now().strftime("%d/%m/%Y"))
     g = compute_brace_plate(p)
     geom = {"outer_dia": g.outer_dia, "inner_dia": g.inner_dia, "num_tie_wires": g.num_tie_wires,
             "angle": g.angle, "plate_width": g.plate_width, "plate_thickness": g.plate_thickness,
-            "bump_width": g.bump_width, "bump_height": g.bump_height, "total_height": g.total_height}
+            "bump_width": g.bump_width, "bump_height": g.bump_height, "total_height": g.total_height,
+            "strip_width": g.strip_width, "bump_plan_width": g.bump_plan_width}
     params_used = {"cathode_dia": cathode, "radial_clearance": rc, "num_tie_wires": int(n),
                    "tie_wire_width": ww, "tie_wire_thickness": wt, "is_small": bool(is_small),
                    "plate_thickness": g.plate_thickness, "plate_width": g.plate_width,
-                   "bump_width": g.bump_width, "bump_height": g.bump_height, "bump_radius": g.bump_radius}
+                   "bump_width": g.bump_width, "bump_height": g.bump_height, "bump_radius": g.bump_radius,
+                   "strip_width": g.strip_width, "bump_plan_width": g.bump_plan_width}
     p.revisions = _bump_revision(job, "brace_plate", req.revision_note, params_used, geom)
     return {"svg": render_brace_plate_svg(g, p), "drawing_no": drawing_no, "component_no": f"{seq:02d}",
             "geometry": geom, "params": params_used, "revisions": [r.dict() for r in p.revisions],
@@ -1972,6 +2559,7 @@ def cad_stack(req: StackRequest, user: str = Depends(require_auth)):
 _CAD_DISPATCH = {
     "container": (ContainerRequest, cad_container),
     "lid_blank": (LidRequest, cad_lid),
+    "lid_assembly": (LidAssemblyRequest, cad_lid_assembly),
     "tie_wire": (TieWireRequest, cad_tie_wire),
     "teflon_disc": (TeflonRequest, cad_teflon),
     "mica_disc_holes": (MicaHolesRequest, cad_mica_holes),
@@ -1994,6 +2582,10 @@ _CAD_DISPATCH = {
     "current_collector_anode": (CurrentCollectorRequest, cad_current_collector_anode),
     "current_collector_cathode": (CurrentCollectorRequest, cad_current_collector_cathode),
     "brace_plate": (BracePlateRequest, cad_brace_plate),
+    "squib": (SquibRequest, cad_squib),
+    "mica_disc_cuts": (MicaDiscCutsRequest, cad_mica_disc_cuts),
+    "fiberfrax_disc_cuts": (MicaDiscCutsRequest, cad_fiberfrax_disc_cuts),
+    "lid_tie_wire": (LidTieWireRequest, cad_lid_tie_wire),
     "deliver_pin": (DeliverPinRequest, cad_deliver_pin),
     "top_assembly": (AssemblyRequest, cad_top_assembly),
     "bottom_assembly": (AssemblyRequest, cad_bottom_assembly),

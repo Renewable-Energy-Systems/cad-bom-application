@@ -47,6 +47,10 @@ class BracePlateParams:
     bump_width: Optional[float] = None       # else Ww + 2
     bump_height: Optional[float] = None      # else Wt x 4
     bump_radius: float = 3.0                 # R on the bump top corners
+    # Plan-view widths (across the strip). The reference sheet dimensions these
+    # in DETAIL-A as 2.1 and 1.5 for a 3 mm tie wire; both are editable.
+    strip_width: Optional[float] = None      # across the plate; else total height
+    bump_plan_width: Optional[float] = None  # across the bump;  else Ww / 2
     clearance_per_side: float = 0.30
     dia_tol: str = "+0.0/-0.2"
     len_tol: str = "±0.5"
@@ -78,6 +82,8 @@ class BracePlateGeom:
     total_height: float
     bump_radius: float
     tie_wire_thickness: float
+    strip_width: float = 0.0
+    bump_plan_width: float = 0.0
     warnings: list = field(default_factory=list)
 
 
@@ -95,11 +101,17 @@ def compute_brace_plate(p: BracePlateParams) -> BracePlateGeom:
     bw = p.bump_width if p.bump_width else round(Ww + 2.0, 2)
     bh = p.bump_height if p.bump_height else round(Wt * 4.0, 2)
     H = round(2 * t + bh, 2)
+    sw = p.strip_width if p.strip_width else H              # across the plate
+    bpl = p.bump_plan_width if p.bump_plan_width else round(Ww / 2.0, 2)
+    if bpl >= sw:
+        bpl = round(sw * 0.7, 2)
+        w.append("Bump plan width was wider than the plate; reduced to fit.")
     return BracePlateGeom(outer_dia=outer, inner_dia=inner, num_tie_wires=n,
                           angle=round(360.0 / n, 2), plate_width=round(bpw, 2),
                           plate_thickness=round(t, 2), bump_width=round(bw, 2),
                           bump_height=round(bh, 2), total_height=H,
-                          bump_radius=p.bump_radius, tie_wire_thickness=round(Wt, 3), warnings=w)
+                          bump_radius=p.bump_radius, tie_wire_thickness=round(Wt, 3),
+                          strip_width=round(sw, 2), bump_plan_width=round(bpl, 2), warnings=w)
 
 
 def _poly(pts, w=THICK, color="#111", dash=None):
@@ -153,11 +165,13 @@ def _cloud(cx, cy, R, bumps=11):
     return _poly(pts, THIN)
 
 
-def _dim_v_small(x, y1, y2, label, size=3.5, side="left"):
+def _dim_v_small(x, y1, y2, label, size=3.5, side="left", tdy=0.0):
+    """Vertical dimension. `tdy` slides the label along the line so two dims on
+    the same side can sit close together without their text colliding."""
     s = [line(x, y1, x, y2, THIN), arrow(x, y1, 0, -1), arrow(x, y2, 0, 1)]
     tx = x - 1.2 if side == "left" else x + 1.2
     anc = "end" if side == "left" else "start"
-    s.append(text(tx, (y1 + y2) / 2 + 0.7, label, size, anchor=anc))
+    s.append(text(tx, (y1 + y2) / 2 + 0.7 + tdy, label, size, anchor=anc))
     return s
 
 
@@ -168,167 +182,186 @@ def _dim_h_small(y, x1, x2, label, size=3.5, above=True):
 
 
 # --------------------------------------------------------------------------- #
+def _plate_plan(cx, cy, ang_deg, rI, L, W, bl, bw) -> list[str]:
+    """One brace plate seen from above: a thin strip (L along the circle x W across)
+    straddling the inner diameter, with the formed bump drawn inside it."""
+    a = math.radians(ang_deg)
+    ru = (math.cos(a), -math.sin(a))           # outward radial (screen y is down)
+    tu = (-math.sin(a), -math.cos(a))          # tangential
+    mx, my = cx + rI * ru[0], cy + rI * ru[1]
+
+    def box(halfL, halfW, w):
+        pts = [(mx + halfL * tu[0] + halfW * ru[0], my + halfL * tu[1] + halfW * ru[1]),
+               (mx - halfL * tu[0] + halfW * ru[0], my - halfL * tu[1] + halfW * ru[1]),
+               (mx - halfL * tu[0] - halfW * ru[0], my - halfL * tu[1] - halfW * ru[1]),
+               (mx + halfL * tu[0] - halfW * ru[0], my + halfL * tu[1] - halfW * ru[1])]
+        return [_poly(pts + [pts[0]], w)]
+
+    return box(L / 2, W / 2, MED) + box(bl / 2, bw / 2, THIN)
+
+
 def _top_view(g: BracePlateGeom, p: BracePlateParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    cx, cy = ax0 + 78, ay0 + 54
-    rO = 46.0
+    rO = 34.0
+    cx = ax0 + (ax1 - ax0) * 0.40
+    cy = ay0 + rO + 12
     sc = rO / (g.outer_dia / 2)
     rI = g.inner_dia / 2 * sc
 
     # centre lines + circles
-    s.append(line(cx - rO - 8, cy, cx + rO + 8, cy, THIN, dash=C_LINE))
-    s.append(line(cx, cy - rO - 8, cx, cy + rO + 8, THIN, dash=C_LINE))
+    s.append(line(cx - rO - 12, cy, cx + rO + 12, cy, THIN, dash=C_LINE))
+    s.append(line(cx, cy - rO - 12, cx, cy + rO + 12, THIN, dash=C_LINE))
     s.append(circle(cx, cy, rO, THICK))
     s.append(circle(cx, cy, rI, MED, dash=C_HID))
 
     n = g.num_tie_wires
     step = 360.0 / n
-    a0 = -90.0
-    detail_i = 1 % n                          # a lower position carries the detail
-    Lp = g.plate_width * sc                   # tangential length = Brace Plate Dia
-    Dp = g.bump_width * sc                     # radial depth = Bump Width
+    a0 = 90.0                                  # first plate at 12 o'clock
+    L = g.plate_width * sc                     # along the circle
+    W = g.strip_width * sc                     # across the strip
+    bl = g.bump_width * sc                     # bump along
+    bw = g.bump_plan_width * sc                # bump across
     for i in range(n):
-        a = math.radians(a0 + i * step)
-        ru = (math.cos(a), math.sin(a))
-        tu = (-math.sin(a), math.cos(a))
-        # radial tie-wire axis: centre -> inner dia
-        s.append(line(cx, cy, cx + rI * ru[0], cy + rI * ru[1], THIN))
-        # brace plate = rectangle: two parallel lines (Brace Plate Dia long); one
-        # touches the inner circle, the rectangle (Bump Width deep) is toward centre.
-        mx, my = cx + rI * ru[0], cy + rI * ru[1]           # tangent point on inner dia
-        A = (mx + Lp / 2 * tu[0], my + Lp / 2 * tu[1])
-        B = (mx - Lp / 2 * tu[0], my - Lp / 2 * tu[1])
-        C = (B[0] - Dp * ru[0], B[1] - Dp * ru[1])
-        D = (A[0] - Dp * ru[0], A[1] - Dp * ru[1])
-        s.append(line(A[0], A[1], B[0], B[1], THICK))       # outer line (on inner dia)
-        s.append(line(D[0], D[1], C[0], C[1], THICK))       # inner line (toward centre)
-        s.append(line(A[0], A[1], D[0], D[1], THICK))       # end cap
-        s.append(line(B[0], B[1], C[0], C[1], THICK))       # end cap
+        s += _plate_plan(cx, cy, a0 + i * step, rI, L, W, bl, bw)
 
-    # DETAIL-A bubble on the detailed plate
-    ad = math.radians(a0 + detail_i * step)
-    dr = rI - Dp * 0.5
-    dcx = cx + dr * math.cos(ad)
-    dcy = cy + dr * math.sin(ad)
-    br = max(Lp / 2, Dp / 2) + 3
-    s.append(circle(dcx, dcy, br, THIN, dash="2,1.2"))
-    s.append(_leader(dcx + br * 0.7, dcy + br * 0.7, dcx + br + 12, dcy + br * 0.7 + 6, "DETAIL- A"))
+    # DETAIL-A cloud around the lower-right plate (as on the reference sheet)
+    ad = math.radians(a0 + (2 % n) * step)
+    dcx, dcy = cx + rI * math.cos(ad), cy - rI * math.sin(ad)
+    dr = max(L, W) / 2 + 4
+    s.append(_cloud(dcx, dcy, dr, bumps=9))
+    s.append(_leader(dcx + dr * 0.72, dcy - dr * 0.30, cx + rO + 15, dcy - dr * 0.30, "DETAIL- A"))
 
-    # D-D cutting plane — HORIZONTAL through the centre (D arrows left & right)
-    yD = cy
+    # D-D cutting plane on the horizontal centre line — arrows point UP
     for sgn in (-1, 1):
-        ex = cx + sgn * (rO + 7)
-        bx = cx + sgn * (rO + 1)
-        s.append(line(bx, yD, ex, yD, THIN))
-        s.append(arrow(bx, yD, -sgn, 0))
-        s.append(text(ex + sgn * 3, yD + 1, "D", 2.6, weight="bold"))
+        xD = cx + sgn * (rO + 6)
+        s.append(line(xD, cy, xD, cy + 9, THIN))
+        s.append(arrow(xD, cy, 0, -1))
+        s.append(text(xD, cy + 13, "D", 2.8, weight="bold"))
 
-    # outer dia leader (Ø + tolerance, tolerance stacked clear of the value)
-    ao = math.radians(-52)
-    tx, ty = cx + rO + 12, cy - rO * 0.74
-    s.append(_leader(cx + rO * math.cos(ao), cy + rO * math.sin(ao), tx, ty, f"Ø{_n(g.outer_dia)}"))
-    tv = p.dia_tol.replace(" ", "").split("/")
-    s.append(text(tx + 9, ty - 1.7, tv[0], 1.7, anchor="start"))
-    s.append(text(tx + 9, ty + 1.6, tv[-1], 1.7, anchor="start"))
-    # inner dia leader
-    ai = math.radians(-70)
-    s.append(_leader(cx + rI * math.cos(ai), cy + rI * math.sin(ai), tx, cy - rO * 0.30, f"Ø{_n(g.inner_dia)}"))
+    # outer / inner diameter leaders, stacked at the upper right
+    tx = cx + rO + 10
+    ty = cy - rO * 0.80
+    ao = math.radians(38)
+    s.append(_leader(cx + rO * math.cos(ao), cy - rO * math.sin(ao), tx, ty, f"Ø{_n(g.outer_dia)}"))
+    tv = [t for t in p.dia_tol.replace(" ", "").split("/") if t]
+    s.append(text(tx + 2, ty - 7.2, tv[0], 2.1, anchor="start"))
+    s.append(text(tx + 2, ty - 3.8, tv[-1], 2.1, anchor="start"))
+    ai = math.radians(20)
+    s.append(_leader(cx + rI * math.cos(ai), cy - rI * math.sin(ai), tx, ty + 8, f"Ø{_n(g.inner_dia)}"))
 
-    # angle between two adjacent cuts (TYP) — kept inside the inward rectangles
-    rA = max((rI - Dp) * 0.6, rI * 0.22)
-    b0, b1 = a0, a0 + step
+    # angle between adjacent plates (TYP) — arc swept BELOW the part
+    rA = rO + 8
+    b0, b1 = a0 + step, a0 + 2 * step          # the two lower positions
     for b in (b0, b1):
-        s.append(line(cx, cy, cx + rA * 1.12 * math.cos(math.radians(b)),
-                      cy + rA * 1.12 * math.sin(math.radians(b)), THIN, dash=C_LINE))
-    arc = _arc(cx, cy, rA, b0, b1, n=10)
+        br = math.radians(b)
+        s.append(line(cx, cy, cx + rA * math.cos(br), cy - rA * math.sin(br), THIN))
+    arc = [(cx + rA * math.cos(math.radians(b0 + (b1 - b0) * k / 16)),
+            cy - rA * math.sin(math.radians(b0 + (b1 - b0) * k / 16))) for k in range(17)]
     s.append(_poly(arc, THIN))
-    s.append(arrow(arc[0][0], arc[0][1], math.sin(math.radians(b0)), -math.cos(math.radians(b0))))
-    s.append(arrow(arc[-1][0], arc[-1][1], -math.sin(math.radians(b1)), math.cos(math.radians(b1))))
-    bm = math.radians((b0 + b1) / 2)
-    s.append(text(cx + (rA + 6) * math.cos(bm), cy + (rA + 6) * math.sin(bm) + 1,
-                  f"{_n(g.angle)}° (TYP)", 2.3, weight="bold"))
+    s.append(arrow(arc[0][0], arc[0][1], -math.sin(math.radians(b0)), -math.cos(math.radians(b0))))
+    s.append(arrow(arc[-1][0], arc[-1][1], math.sin(math.radians(b1)), math.cos(math.radians(b1))))
+    s.append(text(cx, cy + rA + 6, f"{_n(g.angle)}° (TYP)", 2.8, weight="bold"))
     return s
 
 
 def _section_dd(g: BracePlateGeom, p: BracePlateParams) -> list[str]:
+    """Formed-sheet cross-section: wide and flat, with the raised centre bump.
+
+    Horizontal and vertical scales differ (as on the reference sheet) — at true
+    scale a 9 x 2.1 strip would be an unreadable sliver.
+    """
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    sc = 7.0
+    hs = 60.0 / max(g.plate_width, 0.1)                  # along the strip
+    vs = 11.0 / max(g.total_height, 0.1)                 # exaggerated height
+    vs = max(vs, 1.5 / max(g.plate_thickness, 0.1))      # keep the sheet visible
     cx = ax0 + 52
     base = ay0 + 116
-    halfW = g.plate_width / 2 * sc
-    halfBW = g.bump_width / 2 * sc
-    tpx = max(g.plate_thickness * sc, 3.0)
-    bumprise = max((g.bump_height + g.plate_thickness) * sc, 9.0)  # base->top = total height
-    rpx = max(g.bump_radius * sc * 0.18, 2.0)
+    halfW = g.plate_width / 2 * hs
+    halfBW = g.bump_width / 2 * hs
+    tpx = g.plate_thickness * vs
+    bumprise = (g.bump_height + g.plate_thickness) * vs  # base -> outer top = total
+    rpx = max(g.bump_radius * vs * 0.25, 1.4)
     bump, y = _solid_bump(cx, base, halfW, halfBW, tpx, bumprise, rpx)
     s += bump
 
-    # plate thickness (left, at the flat)
-    xt = cx - halfW - 6
-    s.append(line(cx - halfW, y["yPlateTop"], xt - 2, y["yPlateTop"], THIN))
-    s.append(line(cx - halfW, y["base"], xt - 2, y["base"], THIN))
-    s += _dim_v_small(xt, y["yPlateTop"], y["base"], f"{_n(g.plate_thickness)}", side="left")
-    # total height (further left): plate bottom -> bump top
-    xH = cx - halfW - 16
+    # total height (far left): plate bottom -> bump outer top
+    xH = cx - halfW - 15
     s.append(line(cx - halfW, y["base"], xH - 2, y["base"], THIN))
     s.append(line(cx - halfBW + y["r"], y["yTop"], xH - 2, y["yTop"], THIN))
     s += _dim_v_small(xH, y["yTop"], y["base"], f"{_n(g.total_height)}", side="left")
-    # bump height (right): plate top -> bump top
-    xb = cx + halfW + 8
+    # plate thickness (just inside it)
+    xt = cx - halfW - 5
+    s.append(line(cx - halfW, y["yPlateTop"], xt - 2, y["yPlateTop"], THIN))
+    s += _dim_v_small(xt, y["yPlateTop"], y["base"], f"{_n(g.plate_thickness)}", side="left")
+    # bump height (right) — the CLEAR height under the bump, i.e. plate top to the
+    # bump's inner surface. That is the gap the tie wire passes through.
+    xb = cx + halfW + 9
     s.append(line(cx + halfW, y["yPlateTop"], xb + 2, y["yPlateTop"], THIN))
-    s.append(line(cx + halfBW - y["r"], y["yTop"], xb + 2, y["yTop"], THIN))
-    s += _dim_v_small(xb, y["yTop"], y["yPlateTop"], f"{_n(g.bump_height)}", side="right")
-    # bump radius leader onto the rounded top corner
-    s.append(_leader(cx - halfBW + y["r"] * 0.3, y["yTop"] + y["r"] * 0.3,
-                     cx - halfBW - 7, y["yTop"] - 6, f"R{_n(g.bump_radius)}"))
+    s.append(line(cx + y["hbi"] - 1, y["yTopInner"], xb + 2, y["yTopInner"], THIN))
+    s += _dim_v_small(xb, y["yTopInner"], y["yPlateTop"], f"{_n(g.bump_height)}", side="right")
+    # bump radius leader onto the rounded shoulder, from below-left
+    s.append(_leader(cx - halfBW + y["r"] * 0.4, y["yTop"] + y["r"] * 0.5,
+                     cx - halfBW * 0.4, base + 6, f"R{_n(g.bump_radius)}"))
 
-    s.append(text(cx, base + 13, "SECTION D-D", 2.8, weight="bold"))
+    s.append(text(cx, base + 15, "SECTION D-D", 2.8, weight="bold"))
     return s
 
 
 def _detail_a(g: BracePlateGeom, p: BracePlateParams) -> list[str]:
+    """Enlarged PLAN of one brace plate inside the scalloped clearance cloud,
+    laid on the diagonal as on the reference sheet: the strip (length x width)
+    with the bump inside it, all four sizes toleranced."""
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    bx0, by0, bx1, by1 = ax1 - 100, ay0 + 96, ax1, ay1
+    bx0, by0, bx1, by1 = ax1 - 92, ay0 + 100, ax1, ay1 - 2
     s.append(rect(bx0, by0, bx1 - bx0, by1 - by0, MED))
-    s.append(text((bx0 + bx1) / 2, by0 + 6, "DETAIL- A", 2.6, weight="bold"))
+    s.append(text((bx0 + bx1) / 2, by0 + 7, "DETAIL- A", 2.8, weight="bold"))
 
-    cx = (bx0 + bx1) / 2 - 2
-    base = by1 - 26
-    sc = min(6.5, ((bx1 - bx0) - 46) / max(g.plate_width, 0.1))
-    halfW = g.plate_width / 2 * sc
-    halfBW = g.bump_width / 2 * sc
-    tpx = max(g.plate_thickness * sc, 3.0)
-    bumprise = max((g.bump_height + g.plate_thickness) * sc, 9.0)
-    rpx = max(g.bump_radius * sc * 0.18, 2.0)
-    # scalloped cloud boundary behind the bump
-    s.append(_cloud(cx, base - bumprise * 0.4, max(halfW, bumprise) + 5))
-    bump, y = _solid_bump(cx, base, halfW, halfBW, tpx, bumprise, rpx)
-    s += bump
+    cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2 + 2
+    # rotated 45°, the strip spans L/sqrt(2) each way, so keep it well inside the box
+    room = min(bx1 - bx0, by1 - by0) - 26
+    sc = min(4.6, (room * 1.414) / max(g.plate_width, 0.1))
+    L = g.plate_width * sc
+    W = max(g.strip_width * sc, 4.0)
+    bl = g.bump_width * sc
+    bw = max(g.bump_plan_width * sc, 2.4)
 
-    # total length (horizontal, above the crown)
-    yTL = y["yTop"] - 8
-    s.append(line(cx - halfW, y["yPlateTop"], cx - halfW, yTL - 2, THIN))
-    s.append(line(cx + halfW, y["yPlateTop"], cx + halfW, yTL - 2, THIN))
-    s += _dim_h_small(yTL, cx - halfW, cx + halfW, f"{_n(g.plate_width)} {p.len_tol}")
-    # bump width (horizontal, just above crown)
-    yBW = y["yTop"] - 3.2
-    s += _dim_h_small(yBW, cx - halfBW, cx + halfBW, f"{_n(g.bump_width)} {p.bw_tol}")
-    # total height (vertical, left): plate bottom -> bump top
-    xH = cx - halfW - 9
-    s.append(line(cx - halfW, y["base"], xH - 2, y["base"], THIN))
-    s.append(line(cx - halfBW + y["r"], y["yTop"], xH - 2, y["yTop"], THIN))
-    s += _dim_v_small(xH, y["yTop"], y["base"], f"{_n(g.total_height)} {p.h_tol}", side="left")
-    # bump height (vertical, right): plate top -> bump top
-    xb = cx + halfW + 9
-    s.append(line(cx + halfW, y["yPlateTop"], xb + 2, y["yPlateTop"], THIN))
-    s.append(line(cx + halfBW - y["r"], y["yTop"], xb + 2, y["yTop"], THIN))
-    s += _dim_v_small(xb, y["yTop"], y["yPlateTop"], f"{_n(g.bump_height)} {p.bh_tol}", side="right")
+    s.append(_cloud(cx, cy, max(L, W) * 0.42 + 4, bumps=11))
 
-    s.append(text((bx0 + bx1) / 2, by1 - 6, f"CLEARANCE AREA {_n(p.clearance_per_side)} mm", 2.0))
-    s.append(text((bx0 + bx1) / 2, by1 - 3, "PER SIDE", 2.0))
+    # everything below is drawn axis-aligned, then rotated onto the diagonal
+    d: list[str] = []
+    d.append(_poly([(cx - L / 2, cy - W / 2), (cx + L / 2, cy - W / 2),
+                    (cx + L / 2, cy + W / 2), (cx - L / 2, cy + W / 2),
+                    (cx - L / 2, cy - W / 2)], MED))
+    d.append(_poly([(cx - bl / 2, cy - bw / 2), (cx + bl / 2, cy - bw / 2),
+                    (cx + bl / 2, cy + bw / 2), (cx - bl / 2, cy + bw / 2),
+                    (cx - bl / 2, cy - bw / 2)], THIN))
+    # lengths along the strip (left of it)
+    y1 = cy - W / 2 - 5
+    d.append(line(cx - L / 2, cy - W / 2, cx - L / 2, y1 - 2, THIN))
+    d.append(line(cx + L / 2, cy - W / 2, cx + L / 2, y1 - 2, THIN))
+    d += _dim_h_small(y1, cx - L / 2, cx + L / 2, f"{_n(g.plate_width)} {p.len_tol}", size=2.4)
+    y2 = cy - W / 2 - 1.6
+    d += _dim_h_small(y2, cx - bl / 2, cx + bl / 2, f"{_n(g.bump_width)} {p.bw_tol}", size=2.4)
+    # widths across the strip — both beyond the far end as on the reference, the
+    # plate outboard of the bump and their labels slid apart so they stay clear
+    x1 = cx + L / 2 + 8
+    d.append(line(cx + L / 2, cy - W / 2, x1 + 2, cy - W / 2, THIN))
+    d.append(line(cx + L / 2, cy + W / 2, x1 + 2, cy + W / 2, THIN))
+    d += _dim_v_small(x1, cy - W / 2, cy + W / 2, f"{_n(g.strip_width)} {p.h_tol}",
+                      size=2.4, side="right", tdy=-3.0)
+    x2 = cx + L / 2 + 2.5
+    d.append(line(cx + bl / 2, cy - bw / 2, x2 + 2, cy - bw / 2, THIN))
+    d.append(line(cx + bl / 2, cy + bw / 2, x2 + 2, cy + bw / 2, THIN))
+    d += _dim_v_small(x2, cy - bw / 2, cy + bw / 2, f"{_n(g.bump_plan_width)} {p.bh_tol}",
+                      size=2.4, side="right", tdy=5.0)
+    s.append(f'<g transform="rotate(-45 {_n(cx)} {_n(cy)})">' + "".join(d) + "</g>")
+
+    s.append(text(bx0 + 3, by1 - 6, f"CLEARANCE AREA {_n(p.clearance_per_side)} mm",
+                  2.2, anchor="start"))
+    s.append(text(bx0 + 3, by1 - 2.6, "PER SIDE", 2.2, anchor="start"))
     return s
 
 

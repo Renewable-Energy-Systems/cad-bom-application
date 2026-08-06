@@ -547,6 +547,13 @@ const COMPONENTS = [
   { key: "fiberfrax_stack_wrap", label: "FiberFrax Stack Wrap", url: "/api/cad/fiberfrax_stack_wrap", group: "FiberFrax" },
   { key: "fiberfrax_container_insulation", label: "FiberFrax Container Insulation", url: "/api/cad/fiberfrax_container_insulation", group: "FiberFrax" },
   { key: "squib_terminal", label: "Squib Terminal", url: "/api/cad/squib_terminal", group: "Terminals & Misc" },
+  { key: "squib", label: "Squib", url: "/api/cad/squib", group: "Terminals & Misc" },
+  // Sized from the Squib, so it MUST be generated after it — otherwise a run
+  // that makes both would cut the disc to the previous squib's dimensions.
+  { key: "mica_disc_cuts", label: "Silicon Bonded Mica Disc (2 Cuts)", url: "/api/cad/mica_disc_cuts", group: "Terminals & Misc" },
+  { key: "fiberfrax_disc_cuts", label: "FiberFrax Disc (2 Cuts)", url: "/api/cad/fiberfrax_disc_cuts", group: "Terminals & Misc" },
+  // Built from the Lid Blank + Tie Wire, so it must come after both.
+  { key: "lid_tie_wire", label: "Lid with Tie Wire", url: "/api/cad/lid_tie_wire", group: "Terminals & Misc" },
   { key: "current_collector_anode", label: "Current Collector (Anode)", url: "/api/cad/current_collector_anode", group: "Terminals & Misc" },
   { key: "current_collector_cathode", label: "Current Collector (Cathode)", url: "/api/cad/current_collector_cathode", group: "Terminals & Misc" },
   { key: "brace_plate", label: "Brace Plate", url: "/api/cad/brace_plate", group: "Terminals & Misc" },
@@ -555,6 +562,10 @@ const COMPONENTS = [
   { key: "top_assembly", label: "Top Assembly", url: "/api/cad/top_assembly", group: "Assemblies" },
   { key: "bottom_assembly", label: "Bottom Assembly", url: "/api/cad/bottom_assembly", group: "Assemblies" },
   { key: "stack", label: "Stack", url: "/api/cad/stack", group: "Assemblies" },
+  // LID is an assembly of the Lid Blank + Deliver Pins, and its BOM quotes their
+  // drawing numbers — so it must be generated AFTER both of them, otherwise it
+  // would pick up whatever numbers they had before this run.
+  { key: "lid_assembly", label: "Lid", url: "/api/cad/lid_assembly", group: "Assemblies" },
 ];
 
 // Cell assembly: fixed order, bottom (S.No 1) -> top (S.No 6)
@@ -633,6 +644,8 @@ function CadDrawing({ jobs }) {
   // Deliver Pin inputs — only pin type + bottom side of lid (the rest is data-driven)
   const [dpType, setDpType] = useState("round");
   const [dpBottom, setDpBottom] = useState("");
+  // Squib — a standard part, so only the type is picked here
+  const [squibType, setSquibType] = useState("single_head");
   // Assembly input tables (persisted per battery)
   const [topRows, setTopRows] = useState(TOP_ASSEMBLY_ROWS.map(r => ({ ...r })));
   const [bottomRows, setBottomRows] = useState(BOTTOM_ASSEMBLY_ROWS.map(r => ({ ...r })));
@@ -688,6 +701,8 @@ function CadDrawing({ jobs }) {
       const bs = parseFloat(dpBottom); if (!isNaN(bs)) b.bottom_side = bs;
       return b;
     }
+    // squib: standard part — only the type is chosen here, sizes in CAD Revision
+    if (k === "squib") return { squib_type: squibType };
     if (k === "top_assembly" || k === "bottom_assembly" || k === "cell_assembly") {
       const src = k === "top_assembly" ? topRows : (k === "bottom_assembly" ? bottomRows : cellRows);
       return { rows: src.map(r => ({ sno: r.sno, name: r.name,
@@ -788,6 +803,7 @@ function CadDrawing({ jobs }) {
     if (g.num_holes !== undefined && g.pcd !== undefined && g.dia !== undefined && g.lid_od === undefined && g.disc_dia === undefined)
       return `Ø${g.dia} · t ${g.thickness} · ${g.num_holes} holes B @ ${g.theta}° on PCD ${g.pcd}`;
     if (g.dia !== undefined && g.od === undefined && g.disc_dia === undefined) return `Ø${g.dia} ${g.dia_tol || ""} · t ${g.thickness} ${g.thk_tol || ""}`;
+    if (g.cut_gap !== undefined) return `Ø${g.disc_dia} · t ${g.thickness} · ${g.num_cuts} cuts @ ${g.angle}° · cut ${g.cut_length}×${g.cut_width} · gap ${g.cut_gap}`;
     if (g.disc_dia !== undefined) return `Ø${g.disc_dia} · t ${g.thickness} · ${g.num_cuts} cuts @ ${g.cut_angle}° · slot ${g.cut_length}×${g.cut_width}`;
     if (g.length !== undefined) return `${g.length} × ${g.width} × t ${g.thickness}`;
     if (g.lid_od !== undefined) return `Ø${g.lid_od} · t ${g.thickness} · PCD ${g.pcd} · ${g.num_holes} holes @ ${g.theta}°`;
@@ -826,6 +842,22 @@ function CadDrawing({ jobs }) {
                 </React.Fragment>);
             })}
           </div>
+
+          {has("squib") && (
+            <details className="det optgrp" open>
+              <summary>Squib — inputs</summary>
+              <label className="fl">Squib type</label>
+              <select value={squibType} onChange={e => setSquibType(e.target.value)}>
+                <option value="single_head">Single Head</option>
+                <option value="single_head_wired">Single Head with Wired</option>
+                <option value="double_head_igniter">Double Head Igniter</option>
+              </select>
+              <div className="k" style={{ fontSize: 11, marginTop: 6 }}>
+                Standard part — the dimensions come from the standard sheet and can be
+                changed in <b>CAD Revision</b>. Only <b>Single Head</b> is drawn so far.
+              </div>
+            </details>
+          )}
 
           {has("container") && (
             <details className="det optgrp" open>
@@ -1000,6 +1032,30 @@ const REV_SPECS = {
     checks: [
       ["include_section", "Include sectional view (Section X-X)", "Show the Section X-X cross-section on the sheet."],
       ["include_detail", "Include detail view (Detail 'A')", "Show the enlarged Detail 'A' of the edge/groove."],
+    ],
+  },
+  lid_assembly: {
+    url: "/api/cad/lid_assembly", label: "Lid",
+    selects: [],
+    fields: [
+      ["groove_depth", "Groove depth (mm)", "Sealing-groove depth on the lid top face, shown in Section A-A. From the Lid Blank drawing (Table 3)."],
+      ["groove_width", "Groove width (mm)", "Sealing-groove width, shown in Section A-A and as the groove circle in the top view. From the Lid Blank (Table 3)."],
+      ["weld_space", "Weld space from OD (mm)", "Land left in from the lid OD for welding — sets where the groove starts. From the Lid Blank (= container wall)."],
+      ["edge_angle", "Edge taper angle (°)", "Taper angle of the lid edge so it fits inside the container (default 6°). From the Lid Blank."],
+      ["lid_od", "Lid OD (mm)", "Outer diameter of the lid. Taken from the generated Lid Blank drawing (container ID − 0.05)."],
+      ["lid_od_tol", "Lid OD tolerance", "Tolerance printed beside the lid OD, e.g. +0.05 / −0.15."],
+      ["lid_thickness", "Lid blank thickness (mm)", "Lid blank thickness, dimensioned in Section A-A. From the Lid Blank drawing (Table 4b)."],
+      ["thickness_tol", "Thickness tolerance", "Tolerance beside the lid thickness. Blank = IS 2102 medium by size."],
+      ["pcd", "Pin PCD (mm)", "Pitch-circle diameter the terminal pins sit on."],
+      ["num_holes", "Number of holes", "Number of pin holes. Also the pin quantity in the BOM and the count in the G.M. seal note."],
+      ["hole_start_angle", "Hole position — start angle (°)", "Angle of the first hole (CCW from the 3-o'clock axis). The rest step by 360/N. 0 puts a pin on the horizontal centreline."],
+      ["hole_dia", "Hole dia (mm)", "Lid pin-hole diameter. The gap between this and the pin dia is what the G.M. seal fills."],
+      ["pin_dia", "Deliver pin dia (mm)", "Terminal pin diameter, shown with the Ø symbol in Section A-A. From the Deliver Pin drawing."],
+      ["pin_dia_tol", "Pin dia tolerance", "Tolerance for the pin diameter."],
+      ["pin_length", "Total deliver pin length (mm)", "Full pin height (upper part + lid thickness + bottom side). Dimensioned with its tolerance in Section A-A."],
+      ["pin_length_tol", "Pin length tolerance", "Tolerance printed with the total pin length, e.g. ±0.2."],
+      ["upper_part", "Upper part of the pin (mm)", "How far the pin projects above the lid top face. Dimensioned in Section A-A."],
+      ["bottom_side", "Bottom side of lid (mm)", "Pin projection below the lid. Only used to derive the total length when it isn't already known."],
     ],
   },
   tie_wire: {
@@ -1244,6 +1300,84 @@ REV_SPECS["current_collector_cathode"] = {
     ["cc_type", "Collector type", "Type letter, e.g. B."],
   ],
 };
+const DISC_CUT_FIELDS = (stdThk) => [
+  ["disc_dia", "Disc dia (mm)", "Outer diameter of the disc. Blank = auto (cathode diameter)."],
+  ["dia_tol", "Disc dia tolerance", "Tolerance printed under the diameter. Standard +0.00 / −0.20."],
+  ["thickness", "Thickness (mm)", `Disc thickness. Standard ${stdThk}.`],
+  ["num_cuts", "Number of cuts", "Cuts are equally spaced — two cuts sit 180° apart."],
+  ["cut_start_angle", "First cut angle (°)", "Position of the first cut (measured CCW from the 3-o'clock axis; 90 puts it at the top). The rest step by 360/N."],
+  ["cut_clearance", "Cut clearance (mm)", "Added to the squib size to get the cut. Standard 2 — cut length = squib length + this, cut width = squib width + this."],
+  ["cut_length", "Cut length (mm)", "How far each cut reaches in from the rim. Blank = auto (squib length + clearance). The gap between the cuts is disc dia − 2 × this."],
+  ["cut_width", "Cut width (mm)", "Width across each cut. Blank = auto (squib width + clearance)."],
+];
+REV_SPECS["lid_tie_wire"] = {
+  url: "/api/cad/lid_tie_wire", label: "Lid with Tie Wire",
+  selects: [],
+  fields: [
+    ["lid_od", "Lid OD (mm)", "Outer diameter of the lid. Blank = auto (from the Lid Blank drawing)."],
+    ["lid_thickness", "Lid thickness (mm)", "Shown in Section X-X. Blank = auto (from the Lid Blank)."],
+    ["pcd", "Pin PCD (mm)", "Pitch circle the terminal holes sit on. Blank = auto (Lid Blank)."],
+    ["num_holes", "Number of holes", "Terminal holes (+ve, −ve, EI1, EI2). Blank = auto (Lid Blank)."],
+    ["hole_dia", "Hole dia (mm)", "Terminal hole diameter. Blank = auto (Lid Blank)."],
+    ["hole_start_angle", "First hole angle (°)", "Angle of the first hole (CCW from the 3-o'clock axis; 90 = top). The rest step by 360/N."],
+    ["stack_dia", "Stack (cathode) dia (mm)", "Sets where the tie wires begin. Blank = auto (cathode diameter)."],
+    ["start_offset", "Wire start offset (mm)", "How far in from the stack diameter, towards the centre, each wire begins — measured on the radius. Standard 5, which puts the start on a diameter of stack − 10."],
+    ["num_tie_wires", "Number of tie wires", "Spaced equally at 360/N, then rotated clear of the terminal holes. Blank = auto (from the PID)."],
+    ["wire_width", "Tie wire width (mm)", "Blank = auto (from the Tie Wire drawing)."],
+    ["wire_thickness", "Tie wire thickness (mm)", "Shown in Section X-X. Blank = auto (Tie Wire drawing)."],
+    ["weld_length", "Weld length (mm)", "Length of wire welded down on the lid, dimensioned TYP. Standard 5."],
+    ["groove_circle_dia", "Back groove circle (mm)", "Back-side groove circle. Blank = auto (PCD + 10, as on the Lid Blank back view)."],
+    ["weld_strength", "Minimum weld strength", "Printed in the note under Section X-X. Standard 25kgf."],
+  ],
+};
+REV_SPECS["mica_disc_cuts"] = {
+  url: "/api/cad/mica_disc_cuts", label: "Silicon Bonded Mica Disc (2 Cuts)",
+  selects: [], fields: DISC_CUT_FIELDS("1.0"),
+};
+REV_SPECS["fiberfrax_disc_cuts"] = {
+  url: "/api/cad/fiberfrax_disc_cuts", label: "FiberFrax Disc (2 Cuts)",
+  selects: [], fields: DISC_CUT_FIELDS("1.6"),
+};
+REV_SPECS["squib"] = {
+  url: "/api/cad/squib", label: "Squib",
+  selects: [
+    ["squib_type", "Squib type", [["single_head", "Single Head"],
+                                  ["single_head_wired", "Single Head with Wired"],
+                                  ["double_head_igniter", "Double Head Igniter"]],
+      "Single Head and Single Head with Wired are both titled SQUIB. Only Single Head is drawn so far — the other two fall back to it with a warning."],
+  ],
+  fields: [
+    ["total_length", "Overall length (mm)", "Strip + explosive head, end to end. Standard 12.50."],
+    ["head_length", "Head length (mm)", "Length of the explosive compound bead along the axis. Standard 4."],
+    ["head_width", "Head width (mm)", "Width of the bead in the top view. Standard 3.8."],
+    ["head_thickness", "Head thickness (mm)", "Height of the bead in the side view. Standard 2.23."],
+    ["head_end_radius", "Head end radius (mm)", "Rounding of the bead's free end. Blank = auto (half the head width) which gives the full dome on the standard sheet; a smaller value flattens the tip, leaving a straight edge between two corner radii."],
+    ["head_corner_radius", "Head corner radius (mm)", "Rounding on the two strip-side corners of the bead in the top view (the free end is fully domed). Blank = auto (12% of the head width)."],
+    ["strip_width", "Strip width (mm)", "Substrate width at the free (wide) end. Standard 3.9."],
+    ["strip_narrow_width", "Strip width at head (mm)", "Substrate width where it meets the head — this is what makes the taper. Blank = auto (85% of the free end)."],
+    ["strip_thickness", "Strip thickness (mm)", "Substrate thickness in the side view. Standard 0.7."],
+    ["resistance_min", "Resistance min (Ω)", "Lower limit printed in the SQUIB RESISTANCE note (Single Head). Standard 0.80."],
+    ["resistance_max", "Resistance max (Ω)", "Upper limit printed in the SQUIB RESISTANCE note (Single Head). Standard 1.20."],
+    ["body_height", "Wired — body height (mm)", "Single Head with Wired: dome top down to the bottom of the base ferrule. Standard 11."],
+    ["body_height_tol", "Wired — body height tol", "Tolerance shown with the body height in the side view. Standard ±0.2."],
+    ["charge_height", "Wired — charge height (mm)", "Dome top down to the joint between the charge body and the base ferrule. Standard 8. The ferrule height is the remainder."],
+    ["body_width", "Wired — body width (mm)", "Front-view width of the charge body. Standard 4."],
+    ["body_width_tol", "Wired — body width tol", "Tolerance shown with the body width. Standard ±0.3."],
+    ["base_width", "Wired — base width (mm)", "Front-view width of the base ferrule. Standard 3.8."],
+    ["base_width_tol", "Wired — base width tol", "Tolerance shown with the base width. Standard ±0.2."],
+    ["body_depth", "Wired — body depth (mm)", "Side-view width of the charge body. Standard 3.2."],
+    ["body_depth_tol", "Wired — body depth tol", "Tolerance shown with the body depth. Standard ±0.2."],
+    ["wire_length", "Wired — lead length (mm)", "Length of the leads below the body. Drawn with a conventional break. Standard 80."],
+    ["wire_length_tol", "Wired — lead length tol", "Tolerance shown with the lead length. Standard ±5."],
+    ["wire_dia", "Wired — lead dia (mm)", "Diameter of each lead. Standard 0.6."],
+    ["wire_spacing", "Wired — lead spacing (mm)", "Front view, centre to centre between the two leads. Standard 1.5."],
+    ["wire_span_inner", "Wired — lead span inner (mm)", "Side view, inner width across the lead pair. Standard 1.4."],
+    ["wire_span_outer", "Wired — lead span outer (mm)", "Side view, outer width across the lead pair. Standard 1.8."],
+    ["pellet_width_top", "Wired — pellet width top (mm)", "Width of the hatched charge pellet at its top, where it meets the cap. Standard 3.4."],
+    ["pellet_width_bottom", "Wired — pellet width bottom (mm)", "Width of the charge pellet where the resin ferrule starts. Standard 3.6. The side view keeps the same wall thickness."],
+    ["note_label", "Wired — note label", "Text on the leader pointing at the dome. Standard 'NOTE - A'."],
+  ],
+};
 REV_SPECS["brace_plate"] = {
   url: "/api/cad/brace_plate", label: "Brace Plate",
   selects: [],
@@ -1258,6 +1392,8 @@ REV_SPECS["brace_plate"] = {
     ["bump_width", "Bump width (mm)", "Blank = auto (tie-wire width + 2)."],
     ["bump_height", "Bump height (mm)", "Blank = auto (tie-wire thickness × 4)."],
     ["bump_radius", "Bump radius R (mm)", "Radius on the bump top edges (default 3)."],
+    ["strip_width", "Plate width across (mm)", "Width of the strip across its length, shown in the top view and dimensioned in DETAIL-A. Blank = auto (= total height)."],
+    ["bump_plan_width", "Bump width across (mm)", "Width of the bump across the strip, dimensioned in DETAIL-A. Blank = auto (tie-wire width ÷ 2)."],
   ],
 };
 REV_SPECS["deliver_pin"] = {
@@ -1306,7 +1442,10 @@ REV_SPECS["stack"] = {
 };
 const STRING_KEYS = new Set(["container_type", "flange_kind", "flange_position",
   "edge_chamfer", "hole_chamfer", "visual_criteria", "dia_tol", "thk_tol", "ctype",
-  "dia_tol_out", "dia_tol_in", "width_tol", "disc_tol", "cc_type", "is_small", "pin_type"]);
+  "dia_tol_out", "dia_tol_in", "width_tol", "disc_tol", "cc_type", "is_small", "pin_type",
+  "lid_od_tol", "pin_dia_tol", "pin_length_tol", "thickness_tol", "squib_type",
+  "body_width_tol", "base_width_tol", "body_depth_tol", "body_height_tol",
+  "wire_length_tol", "note_label", "weld_strength"]);
 const INT_KEYS = new Set(["num_holes", "num_wires", "qty", "num_tie_wires", "num_cells", "num_stacks"]);
 
 function InfoLabel({ text, info }) {
@@ -1319,7 +1458,16 @@ function InfoLabel({ text, info }) {
 }
 
 // Fields that are always CALCULATED from other inputs (read-only in the form).
-const DERIVED_FIELDS = new Set(["container_id", "cut_length", "hole_angle", "cut_angle"]);
+// Keyed by component: the same field name can be an input on one drawing and a
+// derived value on another (e.g. container_id is derived on the Container but
+// entered by hand on the Lid Blank).
+const DERIVED_FIELDS = {
+  container: new Set(["container_id"]),
+  teflon_disc: new Set(["cut_length", "hole_angle", "cut_angle"]),
+  lid_assembly: new Set(["pin_length"]),
+};
+const _NO_DERIVED = new Set();
+const derivedFor = (ctype) => DERIVED_FIELDS[ctype] || _NO_DERIVED;
 const _num = (v) => { const n = Number(v); return (v === "" || v === null || v === undefined || isNaN(n)) ? null : n; };
 const _r2 = (n) => Math.round(n * 100) / 100;
 
@@ -1335,6 +1483,11 @@ function normalizeForm(ctype, form) {
     if (disc != null && stack != null) f.cut_length = _r2((disc - (stack + 5)) / 2);
     const nh = _num(f.num_holes); if (nh) f.hole_angle = _r2(360 / nh);
     const nw = _num(f.num_wires); if (nw) f.cut_angle = _r2(360 / nw);
+  }
+  if (ctype === "lid_assembly") {
+    // Total deliver-pin length = upper part + lid thickness + bottom side.
+    const up = _num(f.upper_part), th = _num(f.lid_thickness), bs = _num(f.bottom_side);
+    if (up != null && th != null) f.pin_length = _r2(up + th + (bs == null ? 0 : bs));
   }
   return f;
 }
@@ -1352,10 +1505,11 @@ function coerceBody(form) {
   return body;
 }
 
-function ParamControls({ spec, form, onChange }) {
+function ParamControls({ spec, ctype, form, onChange }) {
   const flanged = form.container_type === "flanged";
+  const derivedKeys = derivedFor(ctype);
   const field = ([k, lbl, info]) => {
-    const derived = DERIVED_FIELDS.has(k);
+    const derived = derivedKeys.has(k);
     return (
       <React.Fragment key={k}>
         <InfoLabel text={derived ? lbl + " — auto" : lbl} info={derived ? info + " (calculated automatically)" : info} />
@@ -1450,7 +1604,20 @@ function CadRevision({ jobs, refresh }) {
       setSel(sel.filter(x => x !== ct));
     } else {
       const comp = compOf(ct);
-      const initForm = normalizeForm(ct, Object.assign({}, (comp && comp.params) || {}));
+      // The LID takes its dimensions from the Lid Blank / Deliver Pin drawings
+      // rather than freezing them in params, so seed its form from the last
+      // generated geometry — otherwise the fields open blank and the total pin
+      // length has nothing to derive from. Explicit params still win.
+      const seed = {};
+      if (ct === "lid_assembly" && comp && comp.geometry) {
+        const sp = REV_SPECS[ct] || {};
+        const keys = new Set([].concat(sp.fields || [], sp.deepFields || [], sp.selects || [],
+                                       sp.flangeSelects || [], sp.checks || []).map(f => f[0]));
+        for (const k of Object.keys(comp.geometry)) {
+          if (keys.has(k) && comp.geometry[k] !== null) seed[k] = comp.geometry[k];
+        }
+      }
+      const initForm = normalizeForm(ct, Object.assign(seed, (comp && comp.params) || {}));
       setForms(s => Object.assign({}, s, { [ct]: initForm }));
       setSel([...sel, ct]);
       regen(ct, null, initForm);   // show the initial generated drawing right away
@@ -1513,7 +1680,7 @@ function CadRevision({ jobs, refresh }) {
               {comps.map(c => (
                 <label key={c.ctype} className={"cchk" + (sel.includes(c.ctype) ? " on" : "")}>
                   <input type="checkbox" checked={sel.includes(c.ctype)} onChange={() => toggle(c.ctype)} />
-                  <span>{String(c.no).padStart(2, "0")} · {c.name}</span>
+                  <span>{c.name}</span>
                   <span className="seqno">Rev {(c.revisions && c.revisions.length) ? c.revisions[c.revisions.length - 1].rev : "01"}</span>
                 </label>))}
             </div>
@@ -1545,7 +1712,7 @@ function CadRevision({ jobs, refresh }) {
             const revs = (pv && pv.revisions) || comp.revisions || [];
             return (
               <div className="section" key={ct}>
-                <div className="st">{String(comp.no).padStart(2, "0")} · {comp.name}
+                <div className="st">{comp.name}
                   <span style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
                     {busy[ct] && <span className="k" style={{ fontSize: 11 }}>updating…</span>}
                     <span className="pill">Rev {revs.length ? revs[revs.length - 1].rev : "01"}</span>
@@ -1556,7 +1723,7 @@ function CadRevision({ jobs, refresh }) {
                 </div>
                 <details className="det" open>
                   <summary>Parameters — {spec.label}</summary>
-                  <ParamControls spec={spec} form={form} onChange={(k, v) => setField(ct, k, v)} />
+                  <ParamControls spec={spec} ctype={ct} form={form} onChange={(k, v) => setField(ct, k, v)} />
                 </details>
                 {pv
                   ? <div className="svgwrap" style={{ marginTop: 12 }} dangerouslySetInnerHTML={{ __html: pv.svg }} />
