@@ -420,7 +420,7 @@ COMPONENTS: list[tuple[str, list[str], list[str]]] = [
         "Bump width = tie-wire width + 2; bump height = tie-wire thickness × 4; bump radius 3.0.",
         "Total section height = 2 × plate thickness + bump height; strip width = that total height; "
         "bump width in plan = tie-wire width ÷ 2.",
-        "Material SS 304; quantity = number of tie wires.",
+        "Material MS, zinc plated 12.5 microns min.; quantity = number of tie wires.",
     ], [
         "Cathode dia: PID electrode table (cathode) → Design document “Cathode Dia”.",
         "Container OD (small / large): Design document “Container OD” → Table 1 “Diameter of Battery”.",

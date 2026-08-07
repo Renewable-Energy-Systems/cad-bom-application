@@ -65,7 +65,7 @@ class BracePlateParams:
     h_tol: str = "±0.25"
     bh_tol: str = "±0.2"
     component_name: str = "BRACE PLATE"
-    material: str = "SS 304"
+    material: str = "MS"                     # zinc plated, per the reference sheet
     project: str = ""
     drawing_no: str = "RES-__-__"
     battery_code: str = ""

@@ -2285,7 +2285,7 @@ def cad_brace_plate(req: BracePlateRequest, user: str = Depends(require_auth)):
         bump_width=req.bump_width, bump_height=req.bump_height,
         bump_radius=req.bump_radius if req.bump_radius else 3.0,
         strip_width=req.strip_width, bump_plan_width=req.bump_plan_width,
-        component_name="BRACE PLATE", material="SS 304", project=project,
+        component_name="BRACE PLATE", material="MS", project=project,
         battery_code=code, drawing_no=drawing_no, quantity=f"{int(n):02d}",
         date=datetime.now().strftime("%d/%m/%Y"))
     g = compute_brace_plate(p)
