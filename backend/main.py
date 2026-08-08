@@ -2606,6 +2606,7 @@ class StackAssemblyRequest(BaseModel):
     job_id: Optional[str] = None
     seq: Optional[int] = None
     stack_type: str = "one_stack"      # one_stack | two_stack | three_stack
+    min_dpi: Optional[float] = None    # sharpness floor; higher = smaller, crisper
     revision_note: Optional[str] = None
 
 
@@ -2624,19 +2625,20 @@ def cad_stack_assembly(req: StackAssemblyRequest, user: str = Depends(require_au
     project = job.battery_name if job else ""
     seq, code, drawing_no = (_next_component(job, "stack_assembly", "STACK ASSEMBLY", req.seq)
                              if job else (1, "", "RES-__-01"))
+    dpi_floor = float(req.min_dpi) if req.min_dpi else 120.0
     p = ImageSheetParams(
         image_data=data, image_media=media, image_px_w=pw, image_px_h=ph,
-        caption=STACK_ASSEMBLY_TYPES[st],
+        caption=STACK_ASSEMBLY_TYPES[st], min_dpi=dpi_floor,
         component_name="STACK ASSEMBLY", material="AS LISTED", project=project or "",
         battery_code=code, drawing_no=drawing_no, quantity="01",
         date=datetime.now().strftime("%d/%m/%Y"))
     g = compute_image_sheet(p)
     geom = {"stack_type": st, "variant": STACK_ASSEMBLY_TYPES[st],
             "image_px_w": g.image_px_w, "image_px_h": g.image_px_h,
-            "draw_w": g.draw_w, "draw_h": g.draw_h}
+            "draw_w": g.draw_w, "draw_h": g.draw_h, "dpi": g.dpi}
     # only the variant is stored — the picture itself lives on disk, so replacing
     # it re-renders every battery that uses that variant
-    params_used = {"stack_type": st}
+    params_used = {"stack_type": st, "min_dpi": dpi_floor}
     p.revisions = _bump_revision(job, "stack_assembly", req.revision_note, params_used, geom)
     return {"svg": render_image_sheet_svg(g, p), "drawing_no": drawing_no,
             "component_no": f"{seq:02d}", "geometry": geom, "params": params_used,

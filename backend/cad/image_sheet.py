@@ -28,6 +28,10 @@ class ImageSheetParams:
     image_px_h: int = 0
     caption: str = ""                    # e.g. "ONE STACK"
     frame: bool = False                  # outline around the picture
+    # Never print coarser than this. 120 is the point where the linework is
+    # crisp but the lettering on the picture is still readable; pushing higher
+    # shrinks the picture faster than it sharpens it.
+    min_dpi: float = 120.0
     component_name: str = "DRAWING"
     material: str = "AS LISTED"
     project: str = ""
@@ -46,12 +50,21 @@ class ImageSheetGeom:
     image_px_h: int
     draw_w: float                        # placed size on the sheet, mm
     draw_h: float
+    dpi: float = 0.0                     # how densely it lands on the paper
     caption: str = ""
     warnings: list = field(default_factory=list)
 
 
 def compute_image_sheet(p: ImageSheetParams) -> ImageSheetGeom:
-    """Fit the picture inside the drawing area, keeping its aspect ratio."""
+    """Place the picture keeping its aspect ratio, as large as it can be drawn
+    without going soft.
+
+    Blowing a small picture up to fill the sheet is what makes it look blurred:
+    each source pixel is smeared over a large patch of paper. So the placed size
+    is capped at whatever keeps it at `min_dpi` — the picture comes out smaller
+    but sharp, which is the right trade for a drawing that has to be read. A
+    picture with pixels to spare simply fills the area as before.
+    """
     w: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
     avail_w = (ax1 - ax0) - 4.0
@@ -61,31 +74,38 @@ def compute_image_sheet(p: ImageSheetParams) -> ImageSheetGeom:
     if iw <= 0 or ih <= 0:
         w.append("Picture size could not be read; it is fitted to the drawing area "
                  "and may be stretched.")
-        dw, dh = avail_w, avail_h
-    else:
-        k = min(avail_w / iw, avail_h / ih)      # mm per pixel
-        dw, dh = iw * k, ih * k
-        # What matters for the print is how many pixels land per inch of paper.
-        # A small picture stretched over an A4 sheet prints soft and blocky, so
-        # say so rather than silently upscaling it.
-        dpi = 25.4 / k if k > 0 else 0
-        if dpi < 120:
-            w.append(f"The picture is {int(iw)}x{int(ih)} px, which works out at about "
-                     f"{dpi:.0f} dpi at this size — it will print soft. A scan of "
-                     f"around {int(iw * 200 / max(dpi, 1)):,}x{int(ih * 200 / max(dpi, 1)):,} px "
-                     f"or larger would print cleanly.")
+        return ImageSheetGeom(image_px_w=0, image_px_h=0, draw_w=round(avail_w, 2),
+                              draw_h=round(avail_h, 2), caption=p.caption, warnings=w)
+
+    k_fit = min(avail_w / iw, avail_h / ih)              # mm per px, filling the area
+    k_sharp = 25.4 / max(p.min_dpi, 1.0)                 # mm per px at the sharpness floor
+    k = min(k_fit, k_sharp)
+    dw, dh = iw * k, ih * k
+    dpi = 25.4 / k
+
+    if k_sharp < k_fit:
+        # capped for sharpness — say what a bigger source would buy
+        need_w = int(round(avail_w / k_sharp))
+        need_h = int(round(avail_h / k_sharp))
+        w.append(f"The picture is {int(iw)}x{int(ih)} px, so it is drawn "
+                 f"{dw:.0f}x{dh:.0f} mm to keep it sharp at {dpi:.0f} dpi rather than "
+                 f"being enlarged and going blurred. Supply it at about "
+                 f"{need_w:,}x{need_h:,} px to fill the sheet at this quality.")
     return ImageSheetGeom(image_px_w=int(iw), image_px_h=int(ih),
                           draw_w=round(dw, 2), draw_h=round(dh, 2),
-                          caption=p.caption, warnings=w)
+                          dpi=round(dpi, 1), caption=p.caption, warnings=w)
 
 
 def _picture(g: ImageSheetGeom, p: ImageSheetParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
     top = ay0 + 2.0
+    band_bot = ay1 - (9.0 if g.caption else 4.0)
     cx = (ax0 + ax1) / 2
     x = cx - g.draw_w / 2
-    y = top + max(((ay1 - (9.0 if g.caption else 4.0)) - top - g.draw_h) / 2, 0.0)
+    # Centred across, but sitting near the top rather than floating in the middle
+    # — a picture placed small for sharpness would otherwise hang in white space.
+    y = top + min(6.0, max(band_bot - top - g.draw_h, 0.0))
 
     if not p.image_data:
         s.append(text(cx, (ay0 + ay1) / 2, "NO PICTURE SET FOR THIS VARIANT", 4.0,

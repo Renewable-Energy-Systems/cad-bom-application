@@ -1473,9 +1473,12 @@ REV_SPECS["stack_assembly"] = {
     ["stack_type", "Stack assembly type", [["one_stack", "One Stack"],
                                            ["two_stack", "Two Stack"],
                                            ["three_stack", "Three Stack"]],
-      "Picks which supplied picture goes on the sheet. The picture itself is uploaded in the CAD Drawing module."],
+      "Picks which drawing goes on the sheet. The artwork ships with the app."],
   ],
-  fields: [],
+  fields: [
+    ["min_dpi", "Picture sharpness (dpi)",
+      "How densely the picture is printed. The drawing is placed as large as it can be without going below this — raise it for a smaller, crisper picture, lower it for a bigger, softer one. Default 120."],
+  ],
 };
 const STRING_KEYS = new Set(["container_type", "flange_kind", "flange_position",
   "edge_chamfer", "hole_chamfer", "visual_criteria", "dia_tol", "thk_tol", "ctype",
