@@ -516,7 +516,7 @@ function DataView({ jobs, selectedId, onSelect, refresh }) {
 // CAD Drawing — multi-select
 // --------------------------------------------------------------------------- //
 const PELLETS = [
-  ["cathode_pellet", "Cathode Pellet"], ["anode_pellet", "Anode Pellet"],
+  ["anode_pellet", "Anode Pellet"], ["cathode_pellet", "Cathode Pellet"],
   ["electrolyte_pellet", "Electrolyte Pellet"], ["heat_pellet_1", "Heat Pellet 1"],
   ["heat_pellet_2", "Heat Pellet 2"], ["heat_pellet_3", "Heat Pellet 3"],
   ["heat_pellet_1b", "Heat Pellet 1B"], ["ss_disc", "SS Disc"],
@@ -524,52 +524,75 @@ const PELLETS = [
   ["samica_disc", "Samica Disc"], ["silicon_mica_disc", "Silicon Bonded Mica Disc"],
 ];
 const PELLET_KEYS = new Set(PELLETS.map(([k]) => k));
+
+// The list below is the ORDER THE USER SEES, grouped as the drawing office
+// groups them. It is deliberately NOT the order the drawings are generated in:
+// several drawings read others (the Lid quotes the Lid Blank and Deliver Pin,
+// the 2-cut discs are sized from the Squib, Housing A/B quote the rings, the
+// assemblies quote everything they list), and those sources must exist first or
+// the child picks up a stale drawing number. `stage` carries that:
+//    0 = a part in its own right          1 = built from stage-0 parts
+//    2 = an assembly that quotes many other drawings
+// Generation sorts by stage, keeping this display order within each stage.
 const COMPONENTS = [
-  { key: "container", label: "Container", url: "/api/cad/container", group: "Assembly" },
-  { key: "lid", label: "Lid Blank", url: "/api/cad/lid", group: "Assembly" },
-  { key: "tie_wire", label: "Tie Wire", url: "/api/cad/tie_wire", group: "Assembly" },
-  { key: "teflon", label: "Teflon Disc", url: "/api/cad/teflon_disc", group: "Assembly" },
-  ...PELLETS.map(([k, l]) => ({ key: k, label: l, url: "/api/cad/pellet", ctype: k, group: "Pellets & Discs" })),
-  { key: "mica_disc_holes", label: "Mica Disc (Holes)", url: "/api/cad/mica_holes", group: "Pellets & Discs" },
-  { key: "housing_a", label: "Housing - A", url: "/api/cad/housing_a", group: "Housings" },
-  { key: "housing_b", label: "Housing - B", url: "/api/cad/housing_b", group: "Housings" },
-  { key: "silicon_ring_a", label: "Silicon Bonded Mica Ring (Housing A)", url: "/api/cad/silicon_ring_a", group: "Housings" },
-  { key: "silicon_ring_b", label: "Silicon Bonded Mica Ring (Housing B)", url: "/api/cad/silicon_ring_b", group: "Housings" },
-  { key: "mica_ring", label: "Mica Ring", url: "/api/cad/mica_ring", group: "Housings" },
-  { key: "pyro_wick", label: "Pyro Wick - 01", url: "/api/cad/pyro_wick", group: "Wicks & Strips" },
-  { key: "pyro_wick_02", label: "Pyro Wick - 02", url: "/api/cad/pyro_wick_02", group: "Wicks & Strips" },
-  { key: "samica_strip", label: "Samica Strip", url: "/api/cad/samica_strip", group: "Wicks & Strips" },
-  { key: "mica_strip", label: "Mica Strip", url: "/api/cad/mica_strip", group: "Wicks & Strips" },
-  { key: "glass_cloth_tape", label: "Glass Cloth Tape", url: "/api/cad/glass_cloth_tape", group: "Wicks & Strips" },
-  { key: "adhesive_tape", label: "Adhesive Tape", url: "/api/cad/adhesive_tape", group: "Wicks & Strips" },
-  { key: "samica_wrap", label: "Samica Wrap", url: "/api/cad/samica_wrap", group: "Wicks & Strips" },
-  { key: "mica_wrap", label: "Mica Wrap", url: "/api/cad/mica_wrap", group: "Wicks & Strips" },
-  { key: "fiberfrax_stack_wrap", label: "FiberFrax Stack Wrap", url: "/api/cad/fiberfrax_stack_wrap", group: "FiberFrax" },
-  { key: "fiberfrax_container_insulation", label: "FiberFrax Container Insulation", url: "/api/cad/fiberfrax_container_insulation", group: "FiberFrax" },
-  { key: "squib_terminal", label: "Squib Terminal", url: "/api/cad/squib_terminal", group: "Terminals & Misc" },
-  { key: "squib", label: "Squib", url: "/api/cad/squib", group: "Terminals & Misc" },
-  // Sized from the Squib, so it MUST be generated after it — otherwise a run
-  // that makes both would cut the disc to the previous squib's dimensions.
-  { key: "mica_disc_cuts", label: "Silicon Bonded Mica Disc (2 Cuts)", url: "/api/cad/mica_disc_cuts", group: "Terminals & Misc" },
-  { key: "fiberfrax_disc_cuts", label: "FiberFrax Disc (2 Cuts)", url: "/api/cad/fiberfrax_disc_cuts", group: "Terminals & Misc" },
-  // Built from the Lid Blank + Tie Wire, so it must come after both.
-  { key: "lid_tie_wire", label: "Lid with Tie Wire", url: "/api/cad/lid_tie_wire", group: "Terminals & Misc" },
-  { key: "current_collector_anode", label: "Current Collector (Anode)", url: "/api/cad/current_collector_anode", group: "Terminals & Misc" },
-  { key: "current_collector_cathode", label: "Current Collector (Cathode)", url: "/api/cad/current_collector_cathode", group: "Terminals & Misc" },
-  { key: "brace_plate", label: "Brace Plate", url: "/api/cad/brace_plate", group: "Terminals & Misc" },
-  { key: "deliver_pin", label: "Deliver Pin", url: "/api/cad/deliver_pin", group: "Terminals & Misc" },
-  { key: "cell_assembly", label: "Cell Assembly", url: "/api/cad/cell_assembly", group: "Assemblies" },
-  { key: "top_assembly", label: "Top Assembly", url: "/api/cad/top_assembly", group: "Assemblies" },
-  { key: "bottom_assembly", label: "Bottom Assembly", url: "/api/cad/bottom_assembly", group: "Assemblies" },
+  // shown first, with no group heading
+  { key: "container", label: "Container", url: "/api/cad/container", group: "" },
+  { key: "lid", label: "Lid Blank", url: "/api/cad/lid", group: "" },
+  { key: "deliver_pin", label: "Deliver Pin", url: "/api/cad/deliver_pin", group: "" },
+
+  { key: "lid_assembly", label: "Lid", url: "/api/cad/lid_assembly", group: "Assemblies", stage: 1 },
+  { key: "housing_a", label: "Housing - A", url: "/api/cad/housing_a", group: "Assemblies", stage: 1 },
+  { key: "housing_b", label: "Housing - B", url: "/api/cad/housing_b", group: "Assemblies", stage: 1 },
+  { key: "cell_assembly", label: "Cell Assembly", url: "/api/cad/cell_assembly", group: "Assemblies", stage: 2 },
+  { key: "top_assembly", label: "Top Assembly", url: "/api/cad/top_assembly", group: "Assemblies", stage: 2 },
+  { key: "bottom_assembly", label: "Bottom Assembly", url: "/api/cad/bottom_assembly", group: "Assemblies", stage: 2 },
   { key: "stack", label: "Stack", url: "/api/cad/stack", group: "Assemblies" },
-  // LID is an assembly of the Lid Blank + Deliver Pins, and its BOM quotes their
-  // drawing numbers — so it must be generated AFTER both of them, otherwise it
-  // would pick up whatever numbers they had before this run.
-  { key: "lid_assembly", label: "Lid", url: "/api/cad/lid_assembly", group: "Assemblies" },
-  // Stack Assembly is a general-arrangement view with no dimensions, so it is a
-  // supplied picture per stack count rather than a generated drawing.
   { key: "stack_assembly", label: "Stack Assembly", url: "/api/cad/stack_assembly", group: "Assemblies" },
+  { key: "lid_tie_wire", label: "Lid with Tie Wire", url: "/api/cad/lid_tie_wire", group: "Assemblies", stage: 2 },
+
+  ...PELLETS.map(([k, l]) => ({ key: k, label: l, url: "/api/cad/pellet", ctype: k,
+                                group: "Pellets and Discs" })),
+
+  { key: "tie_wire", label: "Tie Wire", url: "/api/cad/tie_wire", group: "Strips & Wraps" },
+  { key: "pyro_wick", label: "Pyro Wick - 01", url: "/api/cad/pyro_wick", group: "Strips & Wraps" },
+  { key: "pyro_wick_02", label: "Pyro Wick - 02", url: "/api/cad/pyro_wick_02", group: "Strips & Wraps" },
+  { key: "samica_strip", label: "Samica Strip", url: "/api/cad/samica_strip", group: "Strips & Wraps" },
+  { key: "mica_strip", label: "Mica Strip", url: "/api/cad/mica_strip", group: "Strips & Wraps" },
+  { key: "fiberfrax_stack_wrap", label: "FiberFrax Stack Wrap", url: "/api/cad/fiberfrax_stack_wrap", group: "Strips & Wraps" },
+  { key: "glass_cloth_tape", label: "Glass Cloth Tape", url: "/api/cad/glass_cloth_tape", group: "Strips & Wraps" },
+  { key: "adhesive_tape", label: "Adhesive Tape", url: "/api/cad/adhesive_tape", group: "Strips & Wraps" },
+  { key: "samica_wrap", label: "Samica Wrap", url: "/api/cad/samica_wrap", group: "Strips & Wraps" },
+  { key: "mica_wrap", label: "Mica Wrap", url: "/api/cad/mica_wrap", group: "Strips & Wraps" },
+  { key: "fiberfrax_container_insulation", label: "FiberFrax Container Insulation", url: "/api/cad/fiberfrax_container_insulation", group: "Strips & Wraps" },
+  // The Squib was not in the grouping list; it sits with the Squib Terminal as
+  // the nearest fit, and ahead of the 2-cut discs, which are sized from it.
+  { key: "squib", label: "Squib", url: "/api/cad/squib", group: "Strips & Wraps" },
+  { key: "squib_terminal", label: "Squib Terminal", url: "/api/cad/squib_terminal", group: "Strips & Wraps" },
+
+  { key: "teflon", label: "Teflon Disc", url: "/api/cad/teflon_disc", group: "Discs (Cuts & Holes)" },
+  { key: "mica_disc_holes", label: "Mica Disc (Holes)", url: "/api/cad/mica_holes", group: "Discs (Cuts & Holes)" },
+  { key: "mica_disc_cuts", label: "Silicon Bonded Mica Disc (2 Cuts)", url: "/api/cad/mica_disc_cuts", group: "Discs (Cuts & Holes)", stage: 1 },
+  { key: "fiberfrax_disc_cuts", label: "FiberFrax Disc (2 Cuts)", url: "/api/cad/fiberfrax_disc_cuts", group: "Discs (Cuts & Holes)", stage: 1 },
+
+  { key: "mica_ring", label: "Mica Ring", url: "/api/cad/mica_ring", group: "Rings" },
+  { key: "silicon_ring_a", label: "Silicon Bonded Mica Ring (Housing A)", url: "/api/cad/silicon_ring_a", group: "Rings" },
+  { key: "silicon_ring_b", label: "Silicon Bonded Mica Ring (Housing B)", url: "/api/cad/silicon_ring_b", group: "Rings" },
+
+  { key: "current_collector_anode", label: "Current Collector (Anode)", url: "/api/cad/current_collector_anode", group: "Disc with Strips" },
+  { key: "current_collector_cathode", label: "Current Collector (Cathode)", url: "/api/cad/current_collector_cathode", group: "Disc with Strips" },
+  { key: "brace_plate", label: "Brace Plate", url: "/api/cad/brace_plate", group: "Disc with Strips" },
 ];
+
+// Where a generated drawing sits in the list above, by its stored ctype — used
+// to show CAD Revision in the same grouped order as CAD Drawing.
+const LIST_POS = new Map(COMPONENTS.map((c, i) =>
+  [CTYPE_OF[c.key] || c.key, { i, group: c.group }]));
+
+// Selected components in the order they must be GENERATED (see `stage` above).
+const runOrder = (list) => list
+  .map((c, i) => ({ c, i }))
+  .sort((a, b) => ((a.c.stage || 0) - (b.c.stage || 0)) || (a.i - b.i))
+  .map(x => x.c);
 
 const STACK_ASSEMBLY_TYPES = [
   ["one_stack", "One Stack"], ["two_stack", "Two Stack"], ["three_stack", "Three Stack"],
@@ -687,7 +710,8 @@ function CadDrawing({ jobs }) {
 
   const has = (k) => sel.indexOf(k) >= 0;
   const toggle = (k) => setSel(has(k) ? sel.filter(x => x !== k) : [...sel, k]);
-  const chosen = COMPONENTS.filter(c => has(c.key));   // fixed order = drawing order
+  const chosen = COMPONENTS.filter(c => has(c.key));   // the grouped order on screen
+  const order = runOrder(chosen);                      // …and the order they are drawn in
 
   const paramsFor = (k) => {
     if (PELLET_KEYS.has(k)) return { ctype: k };   // pellets: all values from data
@@ -741,7 +765,7 @@ function CadDrawing({ jobs }) {
     setBusy(true); setResults([]); setSkipped([]);
     const out = [], skip = [];
     let n = 0;                                    // running drawing number (only counts successes)
-    for (const c of chosen) {
+    for (const c of order) {                      // dependency order, not list order
       n += 1;
       try {
         const body = Object.assign({ job_id: jobId, seq: n }, paramsFor(c.key));
@@ -840,8 +864,10 @@ function CadDrawing({ jobs }) {
           </div>
           <div className="complist">
             {COMPONENTS.map((c, idx) => {
-              const i = chosen.findIndex(x => x.key === c.key);
-              const showGroup = idx === 0 || COMPONENTS[idx - 1].group !== c.group;
+              // the badge is the drawing number this component will get, so it
+              // follows the generation order, not the position in the list
+              const i = order.findIndex(x => x.key === c.key);
+              const showGroup = !!c.group && (idx === 0 || COMPONENTS[idx - 1].group !== c.group);
               return (
                 <React.Fragment key={c.key}>
                   {showGroup && <div className="grpttl">{c.group}</div>}
@@ -1719,12 +1745,24 @@ function CadRevision({ jobs, refresh }) {
           {comps.length > 0 && <>
             <label className="fl">Drawings to revise (select one or more)</label>
             <div className="complist">
-              {comps.map(c => (
-                <label key={c.ctype} className={"cchk" + (sel.includes(c.ctype) ? " on" : "")}>
-                  <input type="checkbox" checked={sel.includes(c.ctype)} onChange={() => toggle(c.ctype)} />
-                  <span>{c.name}</span>
-                  <span className="seqno">Rev {(c.revisions && c.revisions.length) ? c.revisions[c.revisions.length - 1].rev : "01"}</span>
-                </label>))}
+              {/* same grouped order as CAD Drawing — anything the list does not
+                  know about (an older ctype) falls in at the end */}
+              {comps
+                .map(c => ({ c, p: LIST_POS.get(c.ctype) }))
+                .sort((a, b) => (a.p ? a.p.i : 9e3) - (b.p ? b.p.i : 9e3))
+                .map(({ c, p }, idx, arr) => {
+                  const grp = p ? p.group : "Other";
+                  const prev = idx > 0 ? (arr[idx - 1].p ? arr[idx - 1].p.group : "Other") : null;
+                  return (
+                    <React.Fragment key={c.ctype}>
+                      {!!grp && grp !== prev && <div className="grpttl">{grp}</div>}
+                      <label className={"cchk" + (sel.includes(c.ctype) ? " on" : "")}>
+                        <input type="checkbox" checked={sel.includes(c.ctype)} onChange={() => toggle(c.ctype)} />
+                        <span>{c.name}</span>
+                        <span className="seqno">Rev {(c.revisions && c.revisions.length) ? c.revisions[c.revisions.length - 1].rev : "01"}</span>
+                      </label>
+                    </React.Fragment>);
+                })}
             </div>
             <div className="k" style={{ fontSize: 11, marginTop: 10 }}>
               Open a drawing's <b>Parameters</b> and edit any value — the diagram updates live on the right.
