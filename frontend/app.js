@@ -870,7 +870,7 @@ function CadDrawing({ jobs }) {
   return (
     <div>
       <h2 className="modtitle">CAD Drawing</h2>
-      <div className="viewgrid pick">
+      <div className="viewgrid stack">
         <div className="vlist">
           <label className="fl">Battery</label>
           <select value={jobId} onChange={e => setJobId(e.target.value)}>
@@ -1035,6 +1035,7 @@ function CadDrawing({ jobs }) {
               {saved && <span className="pill">visible in Data View</span>}
             </div>
           )}
+          <div className="dwgrid">
           {results.map((res, i) => {
             const rv = (res.revisions && res.revisions.length) ? res.revisions[res.revisions.length - 1].rev : null;
             return (
@@ -1052,6 +1053,7 @@ function CadDrawing({ jobs }) {
               <div className="svgwrap" dangerouslySetInnerHTML={{ __html: res.svg }} />
             </div>);
           })}
+          </div>
         </div>
       </div>
     </div>

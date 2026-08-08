@@ -82,6 +82,9 @@ body { margin: 0; background: var(--bg); color: var(--text);
 .viewgrid.pick { grid-template-columns: minmax(0, 620px) 1fr; }
 @media (max-width: 1180px) { .viewgrid.pick { grid-template-columns: minmax(0, 420px) 1fr; } }
 @media (max-width: 900px)  { .viewgrid.pick { grid-template-columns: 1fr; } }
+/* CAD Drawing stacks instead of splitting: the picker gets the full width, and
+   the generated drawings run underneath it rather than in a side column */
+.viewgrid.stack { grid-template-columns: 1fr; }
 .vlist .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 .vdetail { min-width: 0; }
 
@@ -93,7 +96,17 @@ body { margin: 0; background: var(--bg); color: var(--text);
    below it should not stretch to match */
 .viewgrid.pick .vlist > select,
 .viewgrid.pick .vlist > input,
-.viewgrid.pick .vlist > .det { max-width: 360px; }
+.viewgrid.pick .vlist > .det,
+.viewgrid.stack .vlist > select,
+.viewgrid.stack .vlist > input,
+.viewgrid.stack .vlist > .det,
+.viewgrid.stack .vlist > button { max-width: 360px; }
+
+/* generated drawings, under the picker: side by side rather than one tall
+   column, so a run of 45 sheets can actually be scanned */
+.dwgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px; align-items: start; }
+.dwgrid .section { margin-bottom: 0; }
 .svgwrap { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px;
   max-width: 560px; }
 .svgwrap svg { width: 100%; height: auto; display: block; }
