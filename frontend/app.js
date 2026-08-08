@@ -566,6 +566,13 @@ const COMPONENTS = [
   // drawing numbers — so it must be generated AFTER both of them, otherwise it
   // would pick up whatever numbers they had before this run.
   { key: "lid_assembly", label: "Lid", url: "/api/cad/lid_assembly", group: "Assemblies" },
+  // Stack Assembly is a general-arrangement view with no dimensions, so it is a
+  // supplied picture per stack count rather than a generated drawing.
+  { key: "stack_assembly", label: "Stack Assembly", url: "/api/cad/stack_assembly", group: "Assemblies" },
+];
+
+const STACK_ASSEMBLY_TYPES = [
+  ["one_stack", "One Stack"], ["two_stack", "Two Stack"], ["three_stack", "Three Stack"],
 ];
 
 // Cell assembly: fixed order, bottom (S.No 1) -> top (S.No 6)
@@ -646,6 +653,10 @@ function CadDrawing({ jobs }) {
   const [dpBottom, setDpBottom] = useState("");
   // Squib — a standard part, so only the type is picked here
   const [squibType, setSquibType] = useState("single_head");
+  // Stack Assembly — pick the variant; its picture is uploaded once and reused
+  const [saType, setSaType] = useState("one_stack");
+  const [saImages, setSaImages] = useState({});
+  const [saBusy, setSaBusy] = useState("");
   // Assembly input tables (persisted per battery)
   const [topRows, setTopRows] = useState(TOP_ASSEMBLY_ROWS.map(r => ({ ...r })));
   const [bottomRows, setBottomRows] = useState(BOTTOM_ASSEMBLY_ROWS.map(r => ({ ...r })));
@@ -667,6 +678,32 @@ function CadDrawing({ jobs }) {
       setAsmSaved({});
     }).catch(() => {});
   }, [jobId]);
+
+  // Stack Assembly pictures: uploaded once and reused by every battery, so they
+  // are loaded with the module rather than per battery.
+  const loadSaImages = () =>
+    api("/api/cad/stack_assembly/images")
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (j) setSaImages(j); })
+      .catch(() => {});
+  useEffect(() => { loadSaImages(); }, []);
+
+  const uploadSaImage = async (file) => {
+    if (!file) return;
+    setSaBusy("Uploading…");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api(`/api/cad/stack_assembly/image/${saType}`,
+                          { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.detail || "Upload failed.");
+      setSaBusy(`Saved — ${Math.round((j.bytes || 0) / 1024)} KB`);
+      await loadSaImages();
+    } catch (e) {
+      setSaBusy(e.message || "Upload failed.");
+    }
+  };
 
   const setTopRowsS = (rows) => { setTopRows(rows); setAsmSaved(s => ({ ...s, top_assembly: false })); };
   const setBottomRowsS = (rows) => { setBottomRows(rows); setAsmSaved(s => ({ ...s, bottom_assembly: false })); };
@@ -703,6 +740,8 @@ function CadDrawing({ jobs }) {
     }
     // squib: standard part — only the type is chosen here, sizes in CAD Revision
     if (k === "squib") return { squib_type: squibType };
+    // stack assembly: the variant picks which supplied picture goes on the sheet
+    if (k === "stack_assembly") return { stack_type: saType };
     if (k === "top_assembly" || k === "bottom_assembly" || k === "cell_assembly") {
       const src = k === "top_assembly" ? topRows : (k === "bottom_assembly" ? bottomRows : cellRows);
       return { rows: src.map(r => ({ sno: r.sno, name: r.name,
@@ -855,6 +894,42 @@ function CadDrawing({ jobs }) {
               <div className="k" style={{ fontSize: 11, marginTop: 6 }}>
                 Standard part — the dimensions come from the standard sheet and can be
                 changed in <b>CAD Revision</b>. Only <b>Single Head</b> is drawn so far.
+              </div>
+            </details>
+          )}
+
+          {has("stack_assembly") && (
+            <details className="det optgrp" open>
+              <summary>Stack Assembly — inputs</summary>
+              <label className="fl">Stack assembly type</label>
+              <select value={saType} onChange={e => { setSaType(e.target.value); setSaBusy(""); }}>
+                {STACK_ASSEMBLY_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+              <div className="k" style={{ fontSize: 11, marginTop: 6 }}>
+                {(saImages[saType] && saImages[saType].set)
+                  ? <>Picture set — <b>{saImages[saType].name}</b>{" "}
+                      ({Math.round((saImages[saType].bytes || 0) / 1024)} KB).</>
+                  : <>No picture set for this type yet — upload one below.</>}
+              </div>
+              <label className="fl" style={{ marginTop: 6 }}>
+                Picture for this type (.png / .jpg)
+              </label>
+              <input type="file" accept=".png,.jpg,.jpeg"
+                     onChange={e => { uploadSaImage(e.target.files && e.target.files[0]);
+                                      e.target.value = ""; }} />
+              {saBusy && <div className="k" style={{ fontSize: 11, marginTop: 4 }}>{saBusy}</div>}
+              <div className="k" style={{ fontSize: 11, marginTop: 6 }}>
+                This drawing is a general arrangement with no dimensions on it, so the
+                picture is what gets printed. It is stored once and reused by every
+                battery — replacing it updates them all on the next generation. The
+                sheet still carries this battery's own drawing number, project, code,
+                date and revisions.
+              </div>
+              <div className="k" style={{ fontSize: 11, marginTop: 4 }}>
+                {STACK_ASSEMBLY_TYPES.map(([v, l]) =>
+                  <span key={v} style={{ marginRight: 10 }}>
+                    {(saImages[v] && saImages[v].set) ? "● " : "○ "}{l}
+                  </span>)}
               </div>
             </details>
           )}
@@ -1440,10 +1515,21 @@ REV_SPECS["stack"] = {
     ["num_stacks", "No. of stacks (parallel)", "Stacks in parallel (from PID; default 1)."],
   ],
 };
+REV_SPECS["stack_assembly"] = {
+  url: "/api/cad/stack_assembly", label: "Stack Assembly",
+  selects: [
+    ["stack_type", "Stack assembly type", [["one_stack", "One Stack"],
+                                           ["two_stack", "Two Stack"],
+                                           ["three_stack", "Three Stack"]],
+      "Picks which supplied picture goes on the sheet. The picture itself is uploaded in the CAD Drawing module."],
+  ],
+  fields: [],
+};
 const STRING_KEYS = new Set(["container_type", "flange_kind", "flange_position",
   "edge_chamfer", "hole_chamfer", "visual_criteria", "dia_tol", "thk_tol", "ctype",
   "dia_tol_out", "dia_tol_in", "width_tol", "disc_tol", "cc_type", "is_small", "pin_type",
   "lid_od_tol", "pin_dia_tol", "pin_length_tol", "thickness_tol", "squib_type",
+  "stack_type",
   "body_width_tol", "base_width_tol", "body_depth_tol", "body_height_tol",
   "wire_length_tol", "note_label", "weld_strength"]);
 const INT_KEYS = new Set(["num_holes", "num_wires", "qty", "num_tie_wires", "num_cells", "num_stacks"]);

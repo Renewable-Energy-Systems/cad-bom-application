@@ -11,3 +11,8 @@ openpyxl
 # only the "Download PDF" action fails (HTTP 500) if they are absent.
 svglib
 reportlab
+
+# Reads the pixel size of an uploaded component picture (STACK ASSEMBLY and any
+# other image-backed sheet) so it can be placed at the right aspect ratio.
+# svglib already pulls this in; declared because we import it directly.
+pillow
