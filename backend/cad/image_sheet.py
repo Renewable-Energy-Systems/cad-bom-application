@@ -28,10 +28,11 @@ class ImageSheetParams:
     image_px_h: int = 0
     caption: str = ""                    # e.g. "ONE STACK"
     frame: bool = False                  # outline around the picture
-    # Never print coarser than this. 120 is the point where the linework is
-    # crisp but the lettering on the picture is still readable; pushing higher
-    # shrinks the picture faster than it sharpens it.
-    min_dpi: float = 120.0
+    # Never print coarser than this. Artwork exported at a sensible size lands
+    # around 110-135 dpi filling the sheet, and reads cleanly; the floor is set
+    # just under that so it only bites on genuinely poor artwork (a screenshot,
+    # say) rather than shrinking good drawings for no gain.
+    min_dpi: float = 110.0
     component_name: str = "DRAWING"
     material: str = "AS LISTED"
     project: str = ""

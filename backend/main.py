@@ -2629,7 +2629,7 @@ def cad_stack_assembly(req: StackAssemblyRequest, user: str = Depends(require_au
     project = job.battery_name if job else ""
     seq, code, drawing_no = (_next_component(job, "stack_assembly", "STACK ASSEMBLY", req.seq)
                              if job else (1, "", "RES-__-01"))
-    dpi_floor = float(req.min_dpi) if req.min_dpi else 120.0
+    dpi_floor = float(req.min_dpi) if req.min_dpi else 110.0
     p = ImageSheetParams(
         image_data=data, image_media=media, image_px_w=pw, image_px_h=ph,
         caption=STACK_ASSEMBLY_TYPES[st], min_dpi=dpi_floor,

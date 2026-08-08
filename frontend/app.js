@@ -1478,7 +1478,7 @@ REV_SPECS["stack_assembly"] = {
   ],
   fields: [
     ["min_dpi", "Picture sharpness (dpi)",
-      "How densely the picture is printed. The drawing is placed as large as it can be without going below this — raise it for a smaller, crisper picture, lower it for a bigger, softer one. Default 120."],
+      "How densely the picture is printed. The drawing is placed as large as it can be without going below this — raise it for a smaller, crisper picture, lower it for a bigger, softer one. Default 110."],
   ],
 };
 const STRING_KEYS = new Set(["container_type", "flange_kind", "flange_position",
