@@ -54,8 +54,12 @@ def _views(g: PelletGeom, p: PelletParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
     cx = (ax0 + ax1) / 2
-    sv = min((ax1 - ax0 - 70) / g.dia, (ay1 - ay0 - 96) / g.dia)
-    r = max(24.0, min(g.dia * sv / 2, 52.0))
+    # Vertical budget below the circle: 30 gap + the side-view bar + 28 for the
+    # diameter dimension and its value, plus an 8 top margin. Sizing to that
+    # rather than to a round guess uses the sheet instead of leaving a third of
+    # it blank, which made a Ø37 pellet print smaller than a Ø20 one needs to.
+    sv = min((ax1 - ax0 - 70) / g.dia, (ay1 - ay0 - 70) / g.dia)
+    r = max(24.0, min(g.dia * sv / 2, 56.0))
 
     # ---------------- TOP VIEW: circle + centre lines ----------------
     cy1 = ay0 + 8 + r

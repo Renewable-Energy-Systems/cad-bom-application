@@ -166,7 +166,10 @@ def _views(g: TeflonGeom, p: TeflonParams) -> list[str]:
     a0 = math.radians(cut_angles[0])
     smx = cx + (r_cin + r) / 2 * math.cos(a0) + (cw / 2) * -math.sin(a0)
     smy = cy - (r_cin + r) / 2 * math.sin(a0) - (cw / 2) * math.cos(a0)
-    s.append(_leader(smx, smy, cx - r - 14, cy - r * 0.45, f"SLOT {_n(g.cut_length)} × {_n(g.cut_width)}"))
+    # Callout text is pulled back inside the sheet when the disc is large enough
+    # that the usual stand-off would run it off the edge.
+    lbl = f"SLOT {_n(g.cut_length)} × {_n(g.cut_width)}"
+    s.append(_leader(smx, smy, max(cx - r - 14, ax0 + len(lbl) * 1.8), cy - r * 0.45, lbl))
     # cut WIDTH "<n> (TYP)" — leader arrow at the cut, across its width
     aw = math.radians(cut_angles[-1])
     wmx = cx + (r - 4) * math.cos(aw) + (cw / 2) * -math.sin(aw)
@@ -174,8 +177,9 @@ def _views(g: TeflonGeom, p: TeflonParams) -> list[str]:
     s.append(_leader(wmx, wmy, cx + r + 14, cy + r * 0.5, f"{_n(g.cut_width)} (TYP)"))
     # A = pin dia ON pcd — leader to a hole
     ha = math.radians(90)
+    lbl_a = f"A = Ø{_n(g.hole_dia)} ON PCD {_n(g.pcd)}"
     s.append(_leader(cx + (r_pcd + r_hole) * math.cos(ha), cy - (r_pcd + r_hole) * math.sin(ha),
-                     cx + r + 14, cy - r + 6, f"A = Ø{_n(g.hole_dia)} ON PCD {_n(g.pcd)}"))
+                     min(cx + r + 14, ax1 - len(lbl_a) * 1.8), cy - r + 6, lbl_a))
     # angle: cut-to-cut AND hole-to-hole
     if g.num_cuts > 1:
         s.append(_angle_dim(cx, cy, r + 2, r + 4, cut_angles[0], cut_angles[1], f"{_n(g.cut_angle)}° (TYP)"))
@@ -201,7 +205,9 @@ def _views(g: TeflonGeom, p: TeflonParams) -> list[str]:
     # thickness + disc dia dims
     s.append(line(cx + r, yT2, cx + r + 9, yT2, THIN)); s.append(line(cx + r, yB2, cx + r + 9, yB2, THIN))
     s.append(dim_v(yT2, yB2, cx + r + 8, f"{_n(g.thickness)}"))
-    s.append(text(cx + r + 11, yT2 - 1, "(STD)", 3.0, anchor="start"))
+    # above the thickness value rather than beside it — the section is only a
+    # couple of millimetres deep, so side by side they touch
+    s.append(text(cx + r + 8, yT2 - 4.5, "(STD)", 2.8))
     s.append(line(cx - r, yB2, cx - r, yB2 + 9, THIN)); s.append(line(cx + r, yB2, cx + r, yB2 + 9, THIN))
     s.append(dim_h(cx - r, cx + r, yB2 + 8, ""))
     s.append(text(cx, yB2 + 7, f"Ø{_n(g.disc_dia)}  +0.2/−0.0", 3.5))

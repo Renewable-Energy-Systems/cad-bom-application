@@ -176,7 +176,8 @@ def _views(g: MicaDiscCutsGeom, p: MicaDiscCutsParams) -> list[str]:
     s.append(line(cx + r, sy, xt + 2, sy, THIN))
     s.append(line(cx + r, sy + tp, xt + 2, sy + tp, THIN))
     s += _dim_v(xt, sy, sy + tp, f"{_n(g.thickness)}")
-    s.append(text(xt + 8, (sy + sy + tp) / 2, "(STANDARD)", 2.6, rot=90))
+    # clear of the value the dimension already carries, not on top of it
+    s.append(text(xt + 13, (sy + sy + tp) / 2, "(STANDARD)", 2.6, rot=90))
     # disc diameter with its tolerance stacked above
     yD = sy + tp + 18
     s.append(line(cx - r, sy + tp, cx - r, yD + 2, THIN))

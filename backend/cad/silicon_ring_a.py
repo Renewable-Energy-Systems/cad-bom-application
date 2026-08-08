@@ -118,7 +118,10 @@ def _views(g: SiliconRingAGeom, p: SiliconRingAParams) -> list[str]:
     ycut = cy1 + (ri + r) / 2
     s.append(line(cx - cw / 2, ycut, cx + cw / 2, ycut, THIN))
     s.append(arrow(cx - cw / 2, ycut, -1, 0)); s.append(arrow(cx + cw / 2, ycut, 1, 0))
-    s.append(text(cx + cw / 2 + 4, ycut + 1, f"{_n(g.cut_width)} CUT", 3.5, anchor="start"))
+    # The cut is narrow and sits inside the annulus, so its value goes OUTSIDE
+    # the ring on a leader rather than printing on top of the circles.
+    s.append(line(cx + cw / 2, ycut, cx + r + 5, ycut, THIN))
+    s.append(text(cx + r + 7, ycut + 1.1, f"{_n(g.cut_width)} CUT", 3.2, anchor="start"))
 
     # ---------------- SECTION A-A (upper part) ----------------
     sec_cy = cy1 + r + 26

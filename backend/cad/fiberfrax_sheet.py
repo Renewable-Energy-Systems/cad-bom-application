@@ -111,7 +111,8 @@ def _views(g: FiberfraxSheetGeom, p: FiberfraxSheetParams) -> list[str]:
     xb = sx + tp + 14
     s.append(line(sx + tp, yT, xb + 2, yT, THIN)); s.append(line(sx + tp, yB, xb + 2, yB, THIN))
     s.append(dim_v(yT, yB, xb, "B", size=4.0))
-    s.append(text(xb + 7, (yT + yB) / 2, p.b_note, 3.0, rot=90))
+    # clear of the B value, which is rotated on the same dimension line
+    s.append(text(xb + 17, (yT + yB) / 2, p.b_note, 2.8, rot=90))
 
     s += _table(g)
     return s
