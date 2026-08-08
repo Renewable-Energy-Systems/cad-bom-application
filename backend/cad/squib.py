@@ -27,10 +27,12 @@ from .container import (PW, PH, AREA, THICK, MED, THIN, _n, line, rect, circle,
                         text, arrow, _hatch_defs, _header, _footer)
 from .lid import _leader
 
-# Colours taken from the standard sheet: kraft substrate + explosive bead.
-STRIP_FILL = "#E3A24A"
-HEAD_FILL = "#C0392B"
-HEAD_FILL_SIDE = "#8E2820"
+# Drawn as plain line work like every other sheet — the parts are told apart by
+# their outlines, hatching and labels, not by colour. The fills stay white
+# rather than "none" so a shape still hides whatever it sits in front of.
+STRIP_FILL = "#fff"
+HEAD_FILL = "#fff"
+HEAD_FILL_SIDE = "#fff"
 
 # type -> the TITLE that goes in the title block
 SQUIB_TYPES = {
@@ -46,10 +48,11 @@ SQUIB_TYPE_LABELS = {
 }
 IMPLEMENTED = {"single_head", "single_head_wired"}
 
-# Single Head with Wired — body colours (charge body / base ferrule)
-BODY_FILL = "#B5326A"
-BASE_FILL = "#E3A24A"
-CHARGE_FILL = "#A62A55"
+# Single Head with Wired — charge body / base ferrule / charge pellet. The
+# pellet keeps a solid fill under its hatch so the hatch reads on white.
+BODY_FILL = "#fff"
+BASE_FILL = "#fff"
+CHARGE_FILL = "#fff"
 
 
 @dataclass
@@ -240,10 +243,13 @@ def _views(g: SquibGeom, p: SquibParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
 
-    # one scale for both views so they stay in true proportion
-    sc = min(112.0 / max(g.total_length, 0.1),
-             30.0 / max(g.head_width, 0.1),
-             24.0 / max(g.head_thickness, 0.1))
+    # One scale for both views so they stay in true proportion. The caps are the
+    # room each dimension may take on the sheet; they were sized to fill the
+    # width, which made the part sit larger than the other drawings, so they are
+    # held to 85% of that.
+    sc = min(95.0 / max(g.total_length, 0.1),
+             25.5 / max(g.head_width, 0.1),
+             20.5 / max(g.head_thickness, 0.1))
     L = g.total_length * sc
     SL = g.strip_length * sc
     HL = g.head_length * sc
