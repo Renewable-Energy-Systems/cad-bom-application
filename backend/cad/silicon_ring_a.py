@@ -67,8 +67,8 @@ def _views(g: SiliconRingAGeom, p: SiliconRingAParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
     cx = ax0 + (ax1 - ax0) * 0.46
-    sv = min((ax1 - ax0 - 96) / g.outer_dia, (ay1 - ay0 - 84) / g.outer_dia)
-    r = max(22.0, min(g.outer_dia * sv / 2, 42.0))
+    sv = min((ax1 - ax0 - 96) / g.outer_dia, (ay1 - ay0 - 66) / g.outer_dia)
+    r = max(22.0, min(g.outer_dia * sv / 2, 50.0))
     ri = g.inner_dia / g.outer_dia * r
     cw = g.cut_width * sv
     cut_angles = [90 + i * (360 / g.num_cuts) for i in range(g.num_cuts)]

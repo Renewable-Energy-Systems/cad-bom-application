@@ -64,8 +64,8 @@ def _views(g: SiliconRingBGeom, p: SiliconRingBParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
     cx = (ax0 + ax1) / 2
-    sv = min((ax1 - ax0 - 84) / g.outer_dia, (ay1 - ay0 - 96) / g.outer_dia)
-    r = max(24.0, min(g.outer_dia * sv / 2, 46.0))
+    sv = min((ax1 - ax0 - 84) / g.outer_dia, (ay1 - ay0 - 74) / g.outer_dia)
+    r = max(24.0, min(g.outer_dia * sv / 2, 54.0))
     ri = g.inner_dia / g.outer_dia * r
 
     # ---------------- TOP VIEW ----------------
@@ -76,12 +76,16 @@ def _views(g: SiliconRingBGeom, p: SiliconRingBParams) -> list[str]:
     s.append(line(cx - r - ext, cy1, cx + r + ext, cy1, THIN, dash=C_LINE))
     s.append(line(cx, cy1 - r - ext, cx, cy1 + r + ext, THIN, dash=C_LINE))
     # OD / ID leaders (value + symbol + tolerance)
+    # Value, symbol and tolerance travel together on the leader. The stand-off is
+    # pulled in when the ring is large, so the text stays on the sheet.
+    lo = f"Ø{_n(g.outer_dia)} {g.dia_tol_out}"
+    li = f"Ø{_n(g.inner_dia)} {g.dia_tol_in}"
+    txo = min(cx + r + 22, ax1 - len(lo) * 1.8)
+    txi = min(cx + r + 22, ax1 - len(li) * 1.8)
     ao = math.radians(50)
-    s.append(_leader(cx + r * math.cos(ao), cy1 - r * math.sin(ao), cx + r + 22, cy1 - r * 0.62,
-                     f"Ø{_n(g.outer_dia)} {g.dia_tol_out}"))
+    s.append(_leader(cx + r * math.cos(ao), cy1 - r * math.sin(ao), txo, cy1 - r * 0.62, lo))
     ai = math.radians(-32)
-    s.append(_leader(cx + ri * math.cos(ai), cy1 - ri * math.sin(ai), cx + r + 22, cy1 - r * 0.12,
-                     f"Ø{_n(g.inner_dia)} {g.dia_tol_in}"))
+    s.append(_leader(cx + ri * math.cos(ai), cy1 - ri * math.sin(ai), txi, cy1 - r * 0.12, li))
     # A-A markers (left & right, arrows up)
     for sx, d in ((cx - r - ext, -1), (cx + r + ext, 1)):
         s.append(arrow(sx, cy1 - 2, 0, -1))

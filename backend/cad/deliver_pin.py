@@ -65,7 +65,9 @@ def _views(g: DeliverPinGeom, p: DeliverPinParams) -> list[str]:
     # scale: fit the length vertically, leaving room for the end-view circle + dims
     top_pad = 18.0                    # end-view circle region
     avail_h = (ay1 - 14) - (ay0 + top_pad + 14)
-    sv = min(avail_h / max(g.pin_length, 0.1), 9.0)
+    # The pin is only a few mm long, so the cap is what governs, not the sheet.
+    # At 9 it drew barely two thirds of the height available.
+    sv = min(avail_h / max(g.pin_length, 0.1), 12.5)
     sv = max(0.6, sv)
     wp = max(g.pin_dia * sv, 6.0)     # body width (paper)
     Lp = g.pin_length * sv

@@ -101,7 +101,7 @@ def _views(g: MicaHolesGeom, p: MicaHolesParams) -> list[str]:
     ax0, ay0, ax1, ay1 = AREA
     cx = (ax0 + ax1) / 2 - 4
     outer = max(g.dia, g.pcd)                       # PCD may exceed the disc dia
-    sv = min((ax1 - ax0 - 92) / outer, (ay1 - ay0 - 108) / outer)
+    sv = min((ax1 - ax0 - 92) / outer, (ay1 - ay0 - 88) / outer)
     r = g.dia * sv / 2                              # disc OD radius
     r_pcd = g.pcd * sv / 2                          # hole PCD radius
     r_out = max(r, r_pcd)
