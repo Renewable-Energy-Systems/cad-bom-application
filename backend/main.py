@@ -2618,10 +2618,14 @@ def cad_stack_assembly(req: StackAssemblyRequest, user: str = Depends(require_au
     st = req.stack_type if req.stack_type in STACK_ASSEMBLY_TYPES else "one_stack"
     data, media, pw, ph = _load_image("stack_assembly", st)
     if not data:
+        have = [lbl for k, lbl in STACK_ASSEMBLY_TYPES.items()
+                if _image_path("stack_assembly", k)]
         raise HTTPException(
             status_code=400,
             detail=(f"Stack Assembly: the {STACK_ASSEMBLY_TYPES[st]} drawing is not "
-                    f"available yet — only ONE STACK has been added so far."))
+                    f"available yet — " +
+                    (f"so far there is {' and '.join(have)}." if have
+                     else "no variants have been added.")))
     project = job.battery_name if job else ""
     seq, code, drawing_no = (_next_component(job, "stack_assembly", "STACK ASSEMBLY", req.seq)
                              if job else (1, "", "RES-__-01"))

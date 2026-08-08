@@ -881,7 +881,8 @@ function CadDrawing({ jobs }) {
                 A general arrangement with no dimensions on it, so the drawing is fixed
                 per stack count and comes with the app — nothing to enter here. The
                 sheet still carries this battery's own drawing number, project, code,
-                date and revisions. Only <b>One Stack</b> is available so far.
+                date and revisions. If a type has not been added yet, generating it
+                says so.
               </div>
             </details>
           )}
