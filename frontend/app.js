@@ -525,30 +525,15 @@ const PELLETS = [
 ];
 const PELLET_KEYS = new Set(PELLETS.map(([k]) => k));
 
-// The list below is the ORDER THE USER SEES, grouped as the drawing office
-// groups them. It is deliberately NOT the order the drawings are generated in:
-// several drawings read others (the Lid quotes the Lid Blank and Deliver Pin,
-// the 2-cut discs are sized from the Squib, Housing A/B quote the rings, the
-// assemblies quote everything they list), and those sources must exist first or
-// the child picks up a stale drawing number. `stage` carries that:
-//    0 = a part in its own right          1 = built from stage-0 parts
-//    2 = an assembly that quotes many other drawings
-// Generation sorts by stage, keeping this display order within each stage.
+// The order the user sees, grouped as the drawing office groups the parts:
+// the four stand-alone drawings first with no heading, then the parts, and the
+// assemblies last because they are built out of everything above them.
 const COMPONENTS = [
   // shown first, with no group heading
   { key: "container", label: "Container", url: "/api/cad/container", group: "" },
   { key: "lid", label: "Lid Blank", url: "/api/cad/lid", group: "" },
   { key: "deliver_pin", label: "Deliver Pin", url: "/api/cad/deliver_pin", group: "" },
-
-  { key: "lid_assembly", label: "Lid", url: "/api/cad/lid_assembly", group: "Assemblies", stage: 1 },
-  { key: "housing_a", label: "Housing - A", url: "/api/cad/housing_a", group: "Assemblies", stage: 1 },
-  { key: "housing_b", label: "Housing - B", url: "/api/cad/housing_b", group: "Assemblies", stage: 1 },
-  { key: "cell_assembly", label: "Cell Assembly", url: "/api/cad/cell_assembly", group: "Assemblies", stage: 2 },
-  { key: "top_assembly", label: "Top Assembly", url: "/api/cad/top_assembly", group: "Assemblies", stage: 2 },
-  { key: "bottom_assembly", label: "Bottom Assembly", url: "/api/cad/bottom_assembly", group: "Assemblies", stage: 2 },
-  { key: "stack", label: "Stack", url: "/api/cad/stack", group: "Assemblies" },
-  { key: "stack_assembly", label: "Stack Assembly", url: "/api/cad/stack_assembly", group: "Assemblies" },
-  { key: "lid_tie_wire", label: "Lid with Tie Wire", url: "/api/cad/lid_tie_wire", group: "Assemblies", stage: 2 },
+  { key: "squib", label: "Squib", url: "/api/cad/squib", group: "" },
 
   ...PELLETS.map(([k, l]) => ({ key: k, label: l, url: "/api/cad/pellet", ctype: k,
                                 group: "Pellets and Discs" })),
@@ -564,23 +549,31 @@ const COMPONENTS = [
   { key: "samica_wrap", label: "Samica Wrap", url: "/api/cad/samica_wrap", group: "Strips & Wraps" },
   { key: "mica_wrap", label: "Mica Wrap", url: "/api/cad/mica_wrap", group: "Strips & Wraps" },
   { key: "fiberfrax_container_insulation", label: "FiberFrax Container Insulation", url: "/api/cad/fiberfrax_container_insulation", group: "Strips & Wraps" },
-  // The Squib was not in the grouping list; it sits with the Squib Terminal as
-  // the nearest fit, and ahead of the 2-cut discs, which are sized from it.
-  { key: "squib", label: "Squib", url: "/api/cad/squib", group: "Strips & Wraps" },
   { key: "squib_terminal", label: "Squib Terminal", url: "/api/cad/squib_terminal", group: "Strips & Wraps" },
-
-  { key: "teflon", label: "Teflon Disc", url: "/api/cad/teflon_disc", group: "Discs (Cuts & Holes)" },
-  { key: "mica_disc_holes", label: "Mica Disc (Holes)", url: "/api/cad/mica_holes", group: "Discs (Cuts & Holes)" },
-  { key: "mica_disc_cuts", label: "Silicon Bonded Mica Disc (2 Cuts)", url: "/api/cad/mica_disc_cuts", group: "Discs (Cuts & Holes)", stage: 1 },
-  { key: "fiberfrax_disc_cuts", label: "FiberFrax Disc (2 Cuts)", url: "/api/cad/fiberfrax_disc_cuts", group: "Discs (Cuts & Holes)", stage: 1 },
 
   { key: "mica_ring", label: "Mica Ring", url: "/api/cad/mica_ring", group: "Rings" },
   { key: "silicon_ring_a", label: "Silicon Bonded Mica Ring (Housing A)", url: "/api/cad/silicon_ring_a", group: "Rings" },
   { key: "silicon_ring_b", label: "Silicon Bonded Mica Ring (Housing B)", url: "/api/cad/silicon_ring_b", group: "Rings" },
 
+  { key: "teflon", label: "Teflon Disc", url: "/api/cad/teflon_disc", group: "Discs (Cuts & Holes)" },
+  { key: "mica_disc_holes", label: "Mica Disc (Holes)", url: "/api/cad/mica_holes", group: "Discs (Cuts & Holes)" },
+  { key: "mica_disc_cuts", label: "Silicon Bonded Mica Disc (2 Cuts)", url: "/api/cad/mica_disc_cuts", group: "Discs (Cuts & Holes)" },
+  { key: "fiberfrax_disc_cuts", label: "FiberFrax Disc (2 Cuts)", url: "/api/cad/fiberfrax_disc_cuts", group: "Discs (Cuts & Holes)" },
+
   { key: "current_collector_anode", label: "Current Collector (Anode)", url: "/api/cad/current_collector_anode", group: "Disc with Strips" },
   { key: "current_collector_cathode", label: "Current Collector (Cathode)", url: "/api/cad/current_collector_cathode", group: "Disc with Strips" },
   { key: "brace_plate", label: "Brace Plate", url: "/api/cad/brace_plate", group: "Disc with Strips" },
+
+  // last: every one of these is built from the drawings above
+  { key: "lid_assembly", label: "Lid", url: "/api/cad/lid_assembly", group: "Assemblies" },
+  { key: "lid_tie_wire", label: "Lid with Tie Wire", url: "/api/cad/lid_tie_wire", group: "Assemblies" },
+  { key: "housing_a", label: "Housing - A", url: "/api/cad/housing_a", group: "Assemblies" },
+  { key: "housing_b", label: "Housing - B", url: "/api/cad/housing_b", group: "Assemblies" },
+  { key: "cell_assembly", label: "Cell Assembly", url: "/api/cad/cell_assembly", group: "Assemblies" },
+  { key: "top_assembly", label: "Top Assembly", url: "/api/cad/top_assembly", group: "Assemblies" },
+  { key: "bottom_assembly", label: "Bottom Assembly", url: "/api/cad/bottom_assembly", group: "Assemblies" },
+  { key: "stack", label: "Stack", url: "/api/cad/stack", group: "Assemblies" },
+  { key: "stack_assembly", label: "Stack Assembly", url: "/api/cad/stack_assembly", group: "Assemblies" },
 ];
 
 // Where a generated drawing sits in the list above, by its stored ctype — used
@@ -588,11 +581,40 @@ const COMPONENTS = [
 const LIST_POS = new Map(COMPONENTS.map((c, i) =>
   [CTYPE_OF[c.key] || c.key, { i, group: c.group }]));
 
-// Selected components in the order they must be GENERATED (see `stage` above).
-const runOrder = (list) => list
-  .map((c, i) => ({ c, i }))
-  .sort((a, b) => ((a.c.stage || 0) - (b.c.stage || 0)) || (a.i - b.i))
-  .map(x => x.c);
+// Drawings that read another drawing, so that one has to exist first or this one
+// picks up a missing or stale drawing number.
+const NEEDS = {
+  lid_assembly: ["lid", "deliver_pin"],
+  lid_tie_wire: ["lid", "tie_wire", "lid_assembly"],
+  mica_disc_cuts: ["squib"],
+  fiberfrax_disc_cuts: ["squib"],
+  housing_a: ["mica_ring", "silicon_ring_a"],
+  housing_b: ["silicon_ring_b"],
+};
+
+// An assembly's BOM quotes whatever it is built from, and the pieces are named
+// by the user in its table — so rather than list them, every assembly simply
+// comes after every part.
+const needsOf = (c) => (c.group === "Assemblies")
+  ? (NEEDS[c.key] || []).concat(COMPONENTS.filter(x => x.group !== "Assemblies").map(x => x.key))
+  : (NEEDS[c.key] || []);
+
+// Selected components in the order they are generated. That is the list order —
+// which the grouping above already keeps valid, so the drawing numbers run
+// straight down the list — repaired only if a future regrouping were to put a
+// drawing ahead of one it reads.
+const runOrder = (list) => {
+  const want = new Set(list.map(c => c.key));
+  const done = new Set(), out = [], rest = [...list];
+  while (rest.length) {
+    let i = rest.findIndex(c => needsOf(c).every(k => !want.has(k) || done.has(k)));
+    if (i < 0) i = 0;                    // circular need — take the next rather than hang
+    const [c] = rest.splice(i, 1);
+    done.add(c.key);
+    out.push(c);
+  }
+  return out;
+};
 
 const STACK_ASSEMBLY_TYPES = [
   ["one_stack", "One Stack"], ["two_stack", "Two Stack"], ["three_stack", "Three Stack"],
