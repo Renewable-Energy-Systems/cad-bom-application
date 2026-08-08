@@ -82,8 +82,8 @@ def _views(g: PelletGeom, p: PelletParams) -> list[str]:
     s.append(line(xt, yT - 6, xt, yB + 6, THIN))
     s.append(arrow(xt, yT, 0, 1))          # top arrow points down (into the gap)
     s.append(arrow(xt, yB, 0, -1))         # bottom arrow points up (into the gap)
-    s.append(text(xt + 2.5, cy2 - 1.4, g.thk_tol, 3.0, anchor="start"))
-    s.append(text(xt + 2.5, cy2 + 2.4, _n(g.thickness), 3.5, anchor="start"))
+    # value and tolerance read as one entry, not two stacked notes
+    s.append(text(xt + 2.5, cy2 + 1.2, f"{_n(g.thickness)} {g.thk_tol}", 3.2, anchor="start"))
 
     # diameter dimension (bottom, arrows pointing OUT to the extension lines)
     yd = cy2 + 16
@@ -92,13 +92,9 @@ def _views(g: PelletGeom, p: PelletParams) -> list[str]:
     s.append(line(cx - r, yd, cx + r, yd, THIN))
     s.append(arrow(cx - r, yd, -1, 0))
     s.append(arrow(cx + r, yd, 1, 0))
-    tols = [t.strip() for t in g.dia_tol.split("/")] if "/" in g.dia_tol else None
-    if tols and len(tols) == 2:
-        s.append(text(cx, yd + 3.6, tols[0], 3.0))
-        s.append(text(cx, yd + 6.5, tols[1], 3.0))
-        s.append(text(cx, yd + 11.0, f"Ø{_n(g.dia)}", 4.0))
-    else:
-        s.append(text(cx, yd + 5.5, f"Ø{_n(g.dia)}  {g.dia_tol}", 4.0))
+    # Diameter and its tolerance on one line, below the dimension line — the same
+    # form the ring and housing sheets use, so a reader sees one convention.
+    s.append(text(cx, yd + 5.6, f"Ø{_n(g.dia)}  {g.dia_tol}", 3.8))
     return s
 
 

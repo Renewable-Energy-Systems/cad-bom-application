@@ -92,10 +92,13 @@ def _hatch_polygon(pts, sign=1, step=1.5):
 def _views(g: GlassClothTapeGeom, p: GlassClothTapeParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    cy = ay0 + 52
-    wv = 44.0                                 # width (paper, not to scale)
+    # The tape is shown with a conventional break, so the length is not to
+    # scale; the drawn size is chosen to use the sheet rather than sit small in
+    # the top corner.
+    cy = ay0 + 60
+    wv = 58.0                                 # width (paper, not to scale)
     yT, yB = cy - wv / 2, cy + wv / 2
-    lx0, lx1 = ax0 + 8, ax0 + 126
+    lx0, lx1 = ax0 + 8, ax0 + 146
     xm = (lx0 + lx1) / 2
     gap = 5
 

@@ -49,7 +49,9 @@ def compute_samica_wrap(p: SamicaWrapParams) -> SamicaWrapGeom:
 def _views(g: SamicaWrapGeom, p: SamicaWrapParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
-    sv = min(((ax1 - ax0) - 74) / g.length, ((ay1 - ay0) - 70) / g.width)
+    # Right-hand allowance: the gap to the edge view, the edge view itself, and
+    # half of its centred label. 74 drew the wrap at under two thirds width.
+    sv = min(((ax1 - ax0) - 56) / g.length, ((ay1 - ay0) - 62) / g.width)
     sv = max(0.2, sv)
     Lp = g.length * sv
     Wp = g.width * sv
@@ -69,14 +71,15 @@ def _views(g: SamicaWrapGeom, p: SamicaWrapParams) -> list[str]:
 
     # CROSS-SECTION (thickness x width)
     tp = max(g.thickness * 2.0, 3.0)
-    sx = lx0 + Lp + 36
+    sx = lx0 + Lp + 26
     s.append(rect(sx, yT, tp, Wp, THICK))
     # thickness dim (top) with (STD)
     s.append(line(sx, yT, sx, yT - 9, THIN)); s.append(line(sx + tp, yT, sx + tp, yT - 9, THIN))
     s.append(line(sx, yT - 6, sx + tp, yT - 6, THIN))
     s.append(arrow(sx, yT - 6, -1, 0)); s.append(arrow(sx + tp, yT - 6, 1, 0))
-    s.append(text(sx + tp + 7, yT - 7, f"{_n(g.thickness)}", 3.5, anchor="start"))
-    s.append(text(sx + tp + 7, yT - 11, "(STD)", 3.0, anchor="start"))
+    # value and its (STD) note on one line, centred over the edge view, so the
+    # label does not push the main view narrower
+    s.append(text(sx + tp / 2, yT - 8.5, f"{_n(g.thickness)} (STD)", 3.0))
     return s
 
 

@@ -84,7 +84,8 @@ def _views(g: FiberfraxSheetGeom, p: FiberfraxSheetParams) -> list[str]:
     s: list[str] = []
     ax0, ay0, ax1, ay1 = AREA
     availH = (FOOT_TOP - (g.qty + 2) * 5 - 12) - (ay0 + 22)
-    sv = min(((ax1 - ax0) - 96) / g.base_length, availH / g.width)
+    # the right-hand band carries the section, its B dimension and the sheet note
+    sv = min(((ax1 - ax0) - 84) / g.base_length, availH / g.width)
     sv = max(0.2, sv)
     Lp = g.base_length * sv
     Wp = g.width * sv

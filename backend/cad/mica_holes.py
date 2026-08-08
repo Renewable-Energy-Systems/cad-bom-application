@@ -166,21 +166,16 @@ def _views(g: MicaHolesGeom, p: MicaHolesParams) -> list[str]:
     s.append(line(xr, yB, xt + 3, yB, THIN))
     s.append(line(xt, yT - 6, xt, yB + 6, THIN))
     s.append(arrow(xt, yT, 0, 1)); s.append(arrow(xt, yB, 0, -1))
-    s.append(text(xt + 2.5, cy2 - 1.4, g.thk_tol, 3.0, anchor="start"))
-    s.append(text(xt + 2.5, cy2 + 2.4, _n(g.thickness), 3.5, anchor="start"))
+    # value and tolerance read as one entry, not two stacked notes
+    s.append(text(xt + 2.5, cy2 + 1.2, f"{_n(g.thickness)} {g.thk_tol}", 3.2, anchor="start"))
     # diameter dimension (bottom, arrows pointing out)
     yd = cy2 + 15
     s.append(line(cx - r, yB, cx - r, yd + 2, THIN))
     s.append(line(cx + r, yB, cx + r, yd + 2, THIN))
     s.append(line(cx - r, yd, cx + r, yd, THIN))
     s.append(arrow(cx - r, yd, -1, 0)); s.append(arrow(cx + r, yd, 1, 0))
-    tols = [t.strip() for t in g.dia_tol.split("/")] if "/" in g.dia_tol else None
-    if tols and len(tols) == 2:
-        s.append(text(cx + 5, yd - 1.2, tols[0], 3.0, anchor="start"))
-        s.append(text(cx + 5, yd + 1.4, tols[1], 3.0, anchor="start"))
-        s.append(text(cx, yd + 5.0, f"Ø{_n(g.dia)}", 4.0))
-    else:
-        s.append(text(cx, yd + 5.0, f"Ø{_n(g.dia)}  {g.dia_tol}", 4.0))
+    # diameter and its tolerance on one line, as on the ring and housing sheets
+    s.append(text(cx, yd + 5.2, f"Ø{_n(g.dia)}  {g.dia_tol}", 3.8))
     s.append(text(cx, yd + 10.5, "SECTION Y-Y", 2.6, weight="bold"))
     return s
 
