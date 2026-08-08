@@ -824,7 +824,7 @@ function CadDrawing({ jobs }) {
   return (
     <div>
       <h2 className="modtitle">CAD Drawing</h2>
-      <div className="viewgrid">
+      <div className="viewgrid pick">
         <div className="vlist">
           <label className="fl">Battery</label>
           <select value={jobId} onChange={e => setJobId(e.target.value)}>
@@ -1705,7 +1705,7 @@ function CadRevision({ jobs, refresh }) {
   return (
     <div>
       <h2 className="modtitle">CAD Revision</h2>
-      <div className="viewgrid">
+      <div className="viewgrid pick">
         <div className="vlist">
           <label className="fl">Battery</label>
           <select value={jobId} onChange={e => loadJob(e.target.value)}>

@@ -44,8 +44,13 @@ body { margin: 0; background: var(--bg); color: var(--text);
   color: var(--text); border-radius: 8px; padding: 9px 10px; font-size: 14px; }
 .lerr { color: #ff6b6b; font-size: 12.5px; margin-top: 12px; }
 
-/* ---- component multi-select ---- */
-.complist { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 6px; align-items: start; }
+/* ---- component multi-select ----
+   The picker sits in the left column of .viewgrid. That column is 240px in the
+   modules that only hold a form, which fits exactly one card — so the modules
+   with a component list use .viewgrid.pick, wide enough for the cards to run
+   side by side instead of in one long column. */
+.complist { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: 6px; align-items: start; }
 .cchk { display: flex; align-items: center; gap: 8px; background: var(--panel2);
   border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 13px; }
 .cchk.on { border-color: var(--accent); }
@@ -72,6 +77,11 @@ body { margin: 0; background: var(--bg); color: var(--text);
 
 /* Data View two-column */
 .viewgrid { display: grid; grid-template-columns: 240px 1fr; gap: 20px; }
+/* modules whose left column carries the component picker need room for several
+   cards across; the drawing preview is capped at 560px so it loses nothing */
+.viewgrid.pick { grid-template-columns: minmax(0, 620px) 1fr; }
+@media (max-width: 1180px) { .viewgrid.pick { grid-template-columns: minmax(0, 420px) 1fr; } }
+@media (max-width: 900px)  { .viewgrid.pick { grid-template-columns: 1fr; } }
 .vlist .sub { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
 .vdetail { min-width: 0; }
 
@@ -79,12 +89,16 @@ body { margin: 0; background: var(--bg); color: var(--text);
 .vlist label.fl { display: block; color: var(--muted); font-size: 12px; margin: 12px 0 4px; }
 .vlist select, .vlist input { width: 100%; background: var(--panel2); border: 1px solid var(--line);
   color: var(--text); border-radius: 7px; padding: 7px 9px; font-size: 13px; }
+/* the picker widens its column for the component cards — the form controls
+   below it should not stretch to match */
+.viewgrid.pick .vlist > select,
+.viewgrid.pick .vlist > input,
+.viewgrid.pick .vlist > .det { max-width: 360px; }
 .svgwrap { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px;
   max-width: 560px; }
 .svgwrap svg { width: 100%; height: auto; display: block; }
 
-/* component picker list */
-.complist { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 6px; align-items: start; }
+/* component picker buttons (the .complist grid is defined once, further up) */
 .cbtn { text-align: left; background: var(--panel2); color: var(--text); border: 1px solid var(--line);
   padding: 9px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; }
 .cbtn:hover { border-color: var(--accent); }
