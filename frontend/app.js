@@ -653,10 +653,8 @@ function CadDrawing({ jobs }) {
   const [dpBottom, setDpBottom] = useState("");
   // Squib — a standard part, so only the type is picked here
   const [squibType, setSquibType] = useState("single_head");
-  // Stack Assembly — pick the variant; its picture is uploaded once and reused
+  // Stack Assembly — a fixed drawing per stack count, so only the type is picked
   const [saType, setSaType] = useState("one_stack");
-  const [saImages, setSaImages] = useState({});
-  const [saBusy, setSaBusy] = useState("");
   // Assembly input tables (persisted per battery)
   const [topRows, setTopRows] = useState(TOP_ASSEMBLY_ROWS.map(r => ({ ...r })));
   const [bottomRows, setBottomRows] = useState(BOTTOM_ASSEMBLY_ROWS.map(r => ({ ...r })));
@@ -678,32 +676,6 @@ function CadDrawing({ jobs }) {
       setAsmSaved({});
     }).catch(() => {});
   }, [jobId]);
-
-  // Stack Assembly pictures: uploaded once and reused by every battery, so they
-  // are loaded with the module rather than per battery.
-  const loadSaImages = () =>
-    api("/api/cad/stack_assembly/images")
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => { if (j) setSaImages(j); })
-      .catch(() => {});
-  useEffect(() => { loadSaImages(); }, []);
-
-  const uploadSaImage = async (file) => {
-    if (!file) return;
-    setSaBusy("Uploading…");
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await api(`/api/cad/stack_assembly/image/${saType}`,
-                          { method: "POST", body: fd });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.detail || "Upload failed.");
-      setSaBusy(`Saved — ${Math.round((j.bytes || 0) / 1024)} KB`);
-      await loadSaImages();
-    } catch (e) {
-      setSaBusy(e.message || "Upload failed.");
-    }
-  };
 
   const setTopRowsS = (rows) => { setTopRows(rows); setAsmSaved(s => ({ ...s, top_assembly: false })); };
   const setBottomRowsS = (rows) => { setBottomRows(rows); setAsmSaved(s => ({ ...s, bottom_assembly: false })); };
@@ -902,34 +874,14 @@ function CadDrawing({ jobs }) {
             <details className="det optgrp" open>
               <summary>Stack Assembly — inputs</summary>
               <label className="fl">Stack assembly type</label>
-              <select value={saType} onChange={e => { setSaType(e.target.value); setSaBusy(""); }}>
+              <select value={saType} onChange={e => setSaType(e.target.value)}>
                 {STACK_ASSEMBLY_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
               <div className="k" style={{ fontSize: 11, marginTop: 6 }}>
-                {(saImages[saType] && saImages[saType].set)
-                  ? <>Picture set — <b>{saImages[saType].name}</b>{" "}
-                      ({Math.round((saImages[saType].bytes || 0) / 1024)} KB).</>
-                  : <>No picture set for this type yet — upload one below.</>}
-              </div>
-              <label className="fl" style={{ marginTop: 6 }}>
-                Picture for this type (.png / .jpg)
-              </label>
-              <input type="file" accept=".png,.jpg,.jpeg"
-                     onChange={e => { uploadSaImage(e.target.files && e.target.files[0]);
-                                      e.target.value = ""; }} />
-              {saBusy && <div className="k" style={{ fontSize: 11, marginTop: 4 }}>{saBusy}</div>}
-              <div className="k" style={{ fontSize: 11, marginTop: 6 }}>
-                This drawing is a general arrangement with no dimensions on it, so the
-                picture is what gets printed. It is stored once and reused by every
-                battery — replacing it updates them all on the next generation. The
+                A general arrangement with no dimensions on it, so the drawing is fixed
+                per stack count and comes with the app — nothing to enter here. The
                 sheet still carries this battery's own drawing number, project, code,
-                date and revisions.
-              </div>
-              <div className="k" style={{ fontSize: 11, marginTop: 4 }}>
-                {STACK_ASSEMBLY_TYPES.map(([v, l]) =>
-                  <span key={v} style={{ marginRight: 10 }}>
-                    {(saImages[v] && saImages[v].set) ? "● " : "○ "}{l}
-                  </span>)}
+                date and revisions. Only <b>One Stack</b> is available so far.
               </div>
             </details>
           )}

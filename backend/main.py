@@ -2558,23 +2558,24 @@ def cad_stack(req: StackRequest, user: str = Depends(require_auth)):
             "warnings": g.warnings, "ctype": "stack", "name": "STACK"}
 
 
-# ---- CAD: Stack Assembly (a supplied picture per stack count) --------------
-# The stack assembly is a general-arrangement view with no dimensions on it, so
-# it is not generated from parameters — the drawing office supplies one picture
-# per variant and the app puts it on the standard RES sheet. Which variant
-# applies depends only on how many stacks the battery has.
+# ---- CAD: Stack Assembly (a bundled picture per stack count) ---------------
+# The stack assembly is a general-arrangement view with no dimensions on it, and
+# which variant applies depends only on how many stacks the battery has. So it
+# is not generated from parameters and nothing is uploaded at run time: the
+# artwork ships with the app in backend/assets/stack_assembly/ and the user just
+# picks the variant. Adding a variant = dropping <key>.png in that folder.
 STACK_ASSEMBLY_TYPES = {
     "one_stack": "ONE STACK",
     "two_stack": "TWO STACK",
     "three_stack": "THREE STACK",
 }
 _IMAGE_MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
-COMPONENT_IMAGE_DIR = config.DATA_DIR / "component_images"
+ASSET_IMAGE_DIR = Path(__file__).resolve().parent / "assets"
 
 
 def _image_path(group: str, key: str) -> Optional[Path]:
-    """Stored picture for a variant, whatever extension it was uploaded with."""
-    base = COMPONENT_IMAGE_DIR / group
+    """Bundled picture for a variant, whichever supported extension it uses."""
+    base = ASSET_IMAGE_DIR / group
     if not base.is_dir():
         return None
     for ext in (".png", ".jpg", ".jpeg"):
@@ -2585,7 +2586,7 @@ def _image_path(group: str, key: str) -> Optional[Path]:
 
 
 def _load_image(group: str, key: str) -> tuple:
-    """(base64 payload, media type, pixel width, pixel height) — ("", ...) if unset."""
+    """(base64 payload, media type, pixel width, pixel height) — ("", ...) if absent."""
     f = _image_path(group, key)
     if not f:
         return "", "image/png", 0, 0
@@ -2599,39 +2600,6 @@ def _load_image(group: str, key: str) -> tuple:
         pass          # placed stretched, and compute_image_sheet warns about it
     return (base64.b64encode(raw).decode("ascii"),
             _IMAGE_MEDIA.get(f.suffix.lower(), "image/png"), w, h)
-
-
-@app.get("/api/cad/stack_assembly/images")
-def stack_assembly_images(user: str = Depends(require_auth)):
-    """Which variants have a picture set (drives the CAD Drawing module's UI)."""
-    out = {}
-    for key, label in STACK_ASSEMBLY_TYPES.items():
-        f = _image_path("stack_assembly", key)
-        out[key] = {"label": label, "set": bool(f),
-                    "bytes": f.stat().st_size if f else 0,
-                    "name": f.name if f else ""}
-    return out
-
-
-@app.post("/api/cad/stack_assembly/image/{stack_type}")
-async def upload_stack_assembly_image(stack_type: str, file: UploadFile = File(...),
-                                      user: str = Depends(require_auth)):
-    if stack_type not in STACK_ASSEMBLY_TYPES:
-        raise HTTPException(status_code=400, detail="Unknown stack assembly type.")
-    ext = Path(file.filename or "").suffix.lower()
-    if ext not in _IMAGE_MEDIA:
-        raise HTTPException(status_code=400,
-                            detail="The picture must be a .png, .jpg or .jpeg file.")
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
-    base = COMPONENT_IMAGE_DIR / "stack_assembly"
-    base.mkdir(parents=True, exist_ok=True)
-    for old in (base / f"{stack_type}{e}" for e in _IMAGE_MEDIA):
-        if old.is_file():
-            old.unlink()
-    (base / f"{stack_type}{ext}").write_bytes(raw)
-    return {"ok": True, "stack_type": stack_type, "bytes": len(raw)}
 
 
 class StackAssemblyRequest(BaseModel):
@@ -2651,9 +2619,8 @@ def cad_stack_assembly(req: StackAssemblyRequest, user: str = Depends(require_au
     if not data:
         raise HTTPException(
             status_code=400,
-            detail=(f"Stack Assembly: no picture has been set for "
-                    f"{STACK_ASSEMBLY_TYPES[st]}. Upload it in the CAD Drawing module "
-                    f"(Stack Assembly — inputs), then generate again."))
+            detail=(f"Stack Assembly: the {STACK_ASSEMBLY_TYPES[st]} drawing is not "
+                    f"available yet — only ONE STACK has been added so far."))
     project = job.battery_name if job else ""
     seq, code, drawing_no = (_next_component(job, "stack_assembly", "STACK ASSEMBLY", req.seq)
                              if job else (1, "", "RES-__-01"))
